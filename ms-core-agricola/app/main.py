@@ -3,7 +3,7 @@ MS Core Agrícola — Punto de entrada principal.
 Registra los routers de Usuarios, Catálogos, Predios y Lotes.
 """
 from fastapi import FastAPI
-from app.api import usuarios, catalogos, predios, lotes
+from app.api import usuarios, catalogos, predios, lotes, auth
 
 app = FastAPI(
     title="FitoGestión — MS Core Agrícola",
@@ -20,6 +20,7 @@ async def health_check():
 
 
 # ── Registro de routers ──────────────────────────────────────────────────────
+app.include_router(auth.router, prefix="/auth", tags=["Autenticación"])
 app.include_router(usuarios.router, prefix="/usuarios", tags=["Usuarios"])
 app.include_router(catalogos.router, prefix="/catalogos", tags=["Catálogos"])
 app.include_router(predios.router, prefix="/predios", tags=["Predios"])

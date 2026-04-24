@@ -16,9 +16,10 @@ class LoteCreate(BaseModel):
     predio_id: str
     nombre: str
     cultivo_id: Optional[str] = None
-    area: Optional[float] = None  # Hectáreas
-    num_plantas: Optional[int] = None
-    estado: str = "activo"  # 'activo', 'inactivo', 'en_cuarentena'
+    area: Optional[float] = None  # Hectáreas (hectares del lote)
+    plantas_por_hectarea: Optional[int] = None  # Densidad de siembra
+    num_plantas: Optional[int] = None  # Total absoluto de plantas
+    estado: str = "Óptimo"  # 'Óptimo', 'Alerta', 'Crítico', 'En Cuarentena'
 
 
 class LoteUpdate(BaseModel):
@@ -26,8 +27,9 @@ class LoteUpdate(BaseModel):
     nombre: Optional[str] = None
     cultivo_id: Optional[str] = None
     area: Optional[float] = None
+    plantas_por_hectarea: Optional[int] = None
     num_plantas: Optional[int] = None
-    estado: Optional[str] = None
+    estado: Optional[str] = None  # 'Óptimo', 'Alerta', 'Crítico', 'En Cuarentena'
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────

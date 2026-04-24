@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS lotes (
     cultivo_id    UUID          REFERENCES cultivos(id) ON DELETE SET NULL,
     area          DECIMAL(10, 2),  -- Hectáreas
     num_plantas   INTEGER,
-    estado        VARCHAR(30)   DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo', 'en_cuarentena')),
+    estado        VARCHAR(30)   DEFAULT 'Óptimo' CHECK (estado IN ('Óptimo', 'Alerta', 'Crítico', 'En Cuarentena')),
     created_at    TIMESTAMPTZ   DEFAULT NOW(),
     updated_at    TIMESTAMPTZ   DEFAULT NOW()
 );
@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS sub_inspecciones (
     ubicacion_referencia    VARCHAR(255),
     observaciones           TEXT,
     estado                  VARCHAR(30)   DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'completado')),
+    plantas_evaluadas       INTEGER       DEFAULT 0,
     created_at              TIMESTAMPTZ   DEFAULT NOW(),
     updated_at              TIMESTAMPTZ   DEFAULT NOW()
 );
@@ -180,6 +181,61 @@ CREATE TRIGGER trg_lotes_updated_at          BEFORE UPDATE ON lotes            F
 CREATE TRIGGER trg_inspecciones_updated_at   BEFORE UPDATE ON inspecciones     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER trg_sub_inspecciones_updated_at BEFORE UPDATE ON sub_inspecciones FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER trg_registro_plantas_updated_at BEFORE UPDATE ON registro_plantas FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ╔════════════════════════════════════════════════════════════════════════════╗
+-- ║ FUNCIÓN Y TRIGGER: Calcular Incidencia Fitosanitaria                       ║
+-- ╚════════════════════════════════════════════════════════════════════════════╝
+CREATE OR REPLACE FUNCTION fn_calcular_incidencia()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_sub_id UUID;
+    v_inspeccion_id UUID;
+    v_lote_id UUID;
+    v_total INT;
+    v_afectadas INT;
+    v_incidencia DECIMAL;
+BEGIN
+    -- Identificar la sub_inspección afectada
+    IF TG_OP = 'DELETE' THEN
+        v_sub_id := OLD.sub_inspeccion_id;
+    ELSE
+        v_sub_id := NEW.sub_inspeccion_id;
+    END IF;
+
+    -- Calcular métricas para esta sub_inspección
+    SELECT COUNT(*), COUNT(*) FILTER (WHERE estado_planta IN ('enferma', 'muerta'))
+    INTO v_total, v_afectadas
+    FROM registro_plantas
+    WHERE sub_inspeccion_id = v_sub_id;
+
+    -- Actualizar el contador de plantas_evaluadas en la sub_inspección
+    UPDATE sub_inspecciones
+    SET plantas_evaluadas = v_total
+    WHERE id = v_sub_id;
+
+    -- Si hay plantas evaluadas, calcular incidencia y verificar estado del lote
+    IF v_total > 0 THEN
+        v_incidencia := (v_afectadas::DECIMAL / v_total) * 100;
+        
+        IF v_incidencia > 10.0 THEN
+            -- Obtener IDs relacionados
+            SELECT inspeccion_id INTO v_inspeccion_id FROM sub_inspecciones WHERE id = v_sub_id;
+            SELECT lote_id INTO v_lote_id FROM inspecciones WHERE id = v_inspeccion_id;
+            
+            -- Actualizar estado del lote a Crítico
+            UPDATE lotes
+            SET estado = 'Crítico'
+            WHERE id = v_lote_id AND estado != 'Crítico';
+        END IF;
+    END IF;
+
+    RETURN NULL; -- AFTER trigger
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_calcular_incidencia_lote
+AFTER INSERT OR UPDATE OR DELETE ON registro_plantas
+FOR EACH ROW EXECUTE FUNCTION fn_calcular_incidencia();
 
 -- ╔════════════════════════════════════════════════════════════════════════════╗
 -- ║ ROW LEVEL SECURITY (RLS) — Habilitar para uso con Supabase               ║

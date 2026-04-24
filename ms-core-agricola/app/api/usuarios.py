@@ -89,3 +89,42 @@ async def eliminar_usuario(usuario_id: str):
     supabase = get_supabase_client()
     supabase.table("usuarios").delete().eq("id", usuario_id).execute()
     return None
+
+
+@router.get("/tecnicos/activos", summary="Listar técnicos activos")
+async def listar_tecnicos_activos():
+    """
+    Retorna todos los usuarios con rol 'tecnico' y estado 'Activo'.
+    Usado por el frontend en la solicitud de inspección (asignación de técnico).
+    """
+    supabase = get_supabase_client()
+    response = (
+        supabase.table("usuarios")
+        .select("*")
+        .eq("rol", "tecnico")
+        .eq("activo", True)
+        .execute()
+    )
+    return response.data
+
+
+@router.patch("/{usuario_id}/toggle-estado", summary="Suspender o activar un usuario")
+async def toggle_estado_usuario(usuario_id: str):
+    """
+    Alterna el estado de un usuario entre activo e inactivo.
+    Equivale a suspender o rehabilitar una cuenta (acción de Admin).
+    """
+    supabase = get_supabase_client()
+    # Obtener estado actual
+    response = supabase.table("usuarios").select("activo").eq("id", usuario_id).execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    activo_actual = response.data[0]["activo"]
+    nuevo_estado = not activo_actual
+    updated = (
+        supabase.table("usuarios")
+        .update({"activo": nuevo_estado})
+        .eq("id", usuario_id)
+        .execute()
+    )
+    return {"id": usuario_id, "activo": nuevo_estado}

@@ -4,7 +4,7 @@ Gestión de Plagas y Cultivos registrados ante el ICA.
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from app.core.supabase_client import get_supabase_client
 
 router = APIRouter()
@@ -16,7 +16,9 @@ class PlagaCreate(BaseModel):
     nombre_comun: str
     nombre_cientifico: Optional[str] = None
     tipo: str  # 'insecto', 'hongo', 'bacteria', 'virus', 'nematodo', 'maleza'
+    riesgo: str = "Medio"  # 'Alto', 'Medio', 'Bajo'
     descripcion: Optional[str] = None
+    cultivos_afectados: Optional[List[str]] = []  # Lista de IDs de cultivos afectados
 
 
 class CultivoCreate(BaseModel):
@@ -117,3 +119,31 @@ async def eliminar_cultivo(cultivo_id: str):
     supabase = get_supabase_client()
     supabase.table("cultivos").delete().eq("id", cultivo_id).execute()
     return None
+
+
+@router.get("/plagas/por-cultivo/{cultivo_id}", summary="Plagas asociadas a un cultivo")
+async def listar_plagas_por_cultivo(cultivo_id: str):
+    """
+    Retorna todas las plagas que afectan a un cultivo específico.
+    Equivale a getPlagasByPrediosCultivos(cultivoId) del frontend.
+    Usa la tabla de relación 'plaga_cultivo' (many-to-many).
+    """
+    supabase = get_supabase_client()
+    # Obtener IDs de plagas que afectan el cultivo
+    rel = (
+        supabase.table("plaga_cultivo")
+        .select("plaga_id")
+        .eq("cultivo_id", cultivo_id)
+        .execute()
+    )
+    plaga_ids = [r["plaga_id"] for r in rel.data]
+    if not plaga_ids:
+        return []
+    # Obtener el detalle de cada plaga
+    response = (
+        supabase.table("plagas")
+        .select("*")
+        .in_("id", plaga_ids)
+        .execute()
+    )
+    return response.data

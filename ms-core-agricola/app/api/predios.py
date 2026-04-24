@@ -18,6 +18,7 @@ class PredioCreate(BaseModel):
     departamento: str
     municipio: str
     vereda: Optional[str] = None
+    numero_registro_ica: Optional[str] = None  # Número de registro ante el ICA
     latitud: Optional[float] = None
     longitud: Optional[float] = None
     area_total: Optional[float] = None  # Hectáreas
@@ -29,6 +30,7 @@ class PredioUpdate(BaseModel):
     departamento: Optional[str] = None
     municipio: Optional[str] = None
     vereda: Optional[str] = None
+    numero_registro_ica: Optional[str] = None
     latitud: Optional[float] = None
     longitud: Optional[float] = None
     area_total: Optional[float] = None

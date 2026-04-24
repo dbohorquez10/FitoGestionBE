@@ -165,3 +165,75 @@ async def resumen_fitosanitario(sub_inspeccion_id: str):
         porcentaje_incidencia=round(((enfermas + muertas) / total) * 100, 2),
         plagas_detectadas=plagas,
     )
+
+
+class AlertaResponse(BaseModel):
+    cultivo_id: str
+    plaga_id: str
+    nivel_alerta: str  # 'Bajo', 'Medio', 'Crítico'
+    incidencia_promedio: float
+    total_evaluadas: int
+    total_afectadas: int
+
+
+@router.get(
+    "/alerta/{cultivo_id}/{plaga_id}",
+    summary="Obtener nivel de alerta por cultivo y plaga",
+    response_model=AlertaResponse,
+)
+async def obtener_alerta_fitosanitaria(cultivo_id: str, plaga_id: str):
+    """
+    Calcula el nivel de alerta fitosanitaria para un cultivo y plaga específicos.
+    Basado en el promedio de incidencia de las inspecciones.
+    """
+    supabase = get_supabase_client()
+    
+    # 1. Obtener lotes del cultivo
+    lotes_res = supabase.table("lotes").select("id").eq("cultivo_id", cultivo_id).execute()
+    lote_ids = [l["id"] for l in lotes_res.data]
+    if not lote_ids:
+        return AlertaResponse(cultivo_id=cultivo_id, plaga_id=plaga_id, nivel_alerta="Bajo", incidencia_promedio=0.0, total_evaluadas=0, total_afectadas=0)
+    
+    # 2. Obtener inspecciones de esos lotes
+    inspecciones_res = supabase.table("inspecciones").select("id").in_("lote_id", lote_ids).execute()
+    inspeccion_ids = [i["id"] for i in inspecciones_res.data]
+    if not inspeccion_ids:
+        return AlertaResponse(cultivo_id=cultivo_id, plaga_id=plaga_id, nivel_alerta="Bajo", incidencia_promedio=0.0, total_evaluadas=0, total_afectadas=0)
+        
+    # 3. Obtener sub-inspecciones
+    subs_res = supabase.table("sub_inspecciones").select("id").in_("inspeccion_id", inspeccion_ids).execute()
+    sub_ids = [s["id"] for s in subs_res.data]
+    if not sub_ids:
+        return AlertaResponse(cultivo_id=cultivo_id, plaga_id=plaga_id, nivel_alerta="Bajo", incidencia_promedio=0.0, total_evaluadas=0, total_afectadas=0)
+
+    # 4. Obtener registros de plantas afectadas por la plaga en esas sub-inspecciones
+    # Consultamos TODOS los registros de esas sub-inspecciones para saber el total evaluado
+    registros_res = supabase.table("registro_plantas").select("plaga_id, estado_planta").in_("sub_inspeccion_id", sub_ids).execute()
+    registros = registros_res.data
+    
+    total_evaluadas = len(registros)
+    if total_evaluadas == 0:
+        return AlertaResponse(cultivo_id=cultivo_id, plaga_id=plaga_id, nivel_alerta="Bajo", incidencia_promedio=0.0, total_evaluadas=0, total_afectadas=0)
+
+    # Contamos las afectadas específicamente por esta plaga
+    afectadas = [r for r in registros if r.get("plaga_id") == plaga_id and r.get("estado_planta") in ["enferma", "muerta"]]
+    total_afectadas = len(afectadas)
+    
+    incidencia = (total_afectadas / total_evaluadas) * 100
+    
+    # Lógica de negocio normativa para el nivel de alerta
+    if incidencia > 10.0:
+        nivel = "Crítico"
+    elif incidencia >= 5.0:
+        nivel = "Medio"
+    else:
+        nivel = "Bajo"
+        
+    return AlertaResponse(
+        cultivo_id=cultivo_id,
+        plaga_id=plaga_id,
+        nivel_alerta=nivel,
+        incidencia_promedio=round(incidencia, 2),
+        total_evaluadas=total_evaluadas,
+        total_afectadas=total_afectadas
+    )

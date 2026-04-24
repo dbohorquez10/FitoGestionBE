@@ -17,6 +17,7 @@ class SubInspeccionCreate(BaseModel):
     codigo_punto: str  # Identificador del punto de muestreo
     ubicacion_referencia: Optional[str] = None
     observaciones: Optional[str] = None
+    plantas_evaluadas: Optional[int] = 0
 
 
 class SubInspeccionUpdate(BaseModel):
@@ -24,6 +25,7 @@ class SubInspeccionUpdate(BaseModel):
     ubicacion_referencia: Optional[str] = None
     observaciones: Optional[str] = None
     estado: Optional[str] = None  # 'pendiente', 'completado'
+    plantas_evaluadas: Optional[int] = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
