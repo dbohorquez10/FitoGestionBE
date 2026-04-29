@@ -3,6 +3,7 @@ MS Inspecciones — Punto de entrada principal.
 Registra los routers de Inspecciones, Sub-inspecciones y Registro de Plantas.
 """
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api import inspecciones, sub_inspecciones, registro_plantas
 
 app = FastAPI(
@@ -10,6 +11,10 @@ app = FastAPI(
     description="Microservicio para el flujo transaccional de Inspecciones fitosanitarias, Sub-inspecciones y Registro de Plantas.",
     version="0.1.0",
 )
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# NOTA: CORS es manejado globalmente por el API Gateway (Nginx).
+# No añadir CORSMiddleware aquí para evitar duplicación de cabeceras.
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ MS Core Agrícola — Punto de entrada principal.
 Registra los routers de Usuarios, Catálogos, Predios y Lotes.
 """
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api import usuarios, catalogos, predios, lotes, auth
 
 app = FastAPI(
@@ -10,6 +11,10 @@ app = FastAPI(
     description="Microservicio para la gestión de Usuarios, Catálogos (Plagas/Cultivos), Predios y Lotes.",
     version="0.1.0",
 )
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# NOTA: CORS es manejado globalmente por el API Gateway (Nginx).
+# No añadir CORSMiddleware aquí para evitar duplicación de cabeceras.
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────

@@ -31,7 +31,7 @@ class SubInspeccionUpdate(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/inspeccion/{inspeccion_id}", summary="Listar sub-inspecciones de una inspección")
-async def listar_sub_inspecciones(inspeccion_id: str):
+def listar_sub_inspecciones(inspeccion_id: str):
     """Retorna todas las sub-inspecciones de una inspección principal."""
     supabase = get_supabase_client()
     response = (
@@ -44,7 +44,7 @@ async def listar_sub_inspecciones(inspeccion_id: str):
 
 
 @router.get("/{sub_inspeccion_id}", summary="Obtener una sub-inspección por ID")
-async def obtener_sub_inspeccion(sub_inspeccion_id: str):
+def obtener_sub_inspeccion(sub_inspeccion_id: str):
     """Retorna una sub-inspección específica con sus registros de plantas."""
     supabase = get_supabase_client()
     response = (
@@ -59,7 +59,7 @@ async def obtener_sub_inspeccion(sub_inspeccion_id: str):
 
 
 @router.post("/", status_code=201, summary="Crear una sub-inspección")
-async def crear_sub_inspeccion(sub_inspeccion: SubInspeccionCreate):
+def crear_sub_inspeccion(sub_inspeccion: SubInspeccionCreate):
     """Crea un nuevo punto de muestreo dentro de una inspección."""
     supabase = get_supabase_client()
     data = sub_inspeccion.model_dump()
@@ -69,7 +69,7 @@ async def crear_sub_inspeccion(sub_inspeccion: SubInspeccionCreate):
 
 
 @router.put("/{sub_inspeccion_id}", summary="Actualizar una sub-inspección")
-async def actualizar_sub_inspeccion(sub_inspeccion_id: str, sub_inspeccion: SubInspeccionUpdate):
+def actualizar_sub_inspeccion(sub_inspeccion_id: str, sub_inspeccion: SubInspeccionUpdate):
     """Actualiza los datos de una sub-inspección existente."""
     supabase = get_supabase_client()
     data = {k: v for k, v in sub_inspeccion.model_dump().items() if v is not None}
@@ -85,7 +85,7 @@ async def actualizar_sub_inspeccion(sub_inspeccion_id: str, sub_inspeccion: SubI
 
 
 @router.delete("/{sub_inspeccion_id}", status_code=204, summary="Eliminar una sub-inspección")
-async def eliminar_sub_inspeccion(sub_inspeccion_id: str):
+def eliminar_sub_inspeccion(sub_inspeccion_id: str):
     """Elimina una sub-inspección y sus registros de plantas asociados."""
     supabase = get_supabase_client()
     supabase.table("sub_inspecciones").delete().eq("id", sub_inspeccion_id).execute()

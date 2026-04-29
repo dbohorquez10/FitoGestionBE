@@ -47,55 +47,21 @@ class UsuarioResponse(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/", summary="Listar todos los usuarios")
-async def listar_usuarios():
+def listar_usuarios():
     """Retorna la lista completa de usuarios registrados."""
     supabase = get_supabase_client()
     response = supabase.table("usuarios").select("*").execute()
     return response.data
 
 
-@router.get("/{usuario_id}", summary="Obtener un usuario por ID")
-async def obtener_usuario(usuario_id: str):
-    """Retorna un usuario específico por su ID."""
-    supabase = get_supabase_client()
-    response = supabase.table("usuarios").select("*").eq("id", usuario_id).execute()
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return response.data[0]
-
-
-@router.post("/", status_code=201, summary="Crear un nuevo usuario")
-async def crear_usuario(usuario: UsuarioCreate):
-    """Crea un nuevo usuario en el sistema."""
-    supabase = get_supabase_client()
-    response = supabase.table("usuarios").insert(usuario.model_dump()).execute()
-    return response.data[0]
-
-
-@router.put("/{usuario_id}", summary="Actualizar un usuario")
-async def actualizar_usuario(usuario_id: str, usuario: UsuarioUpdate):
-    """Actualiza los datos de un usuario existente."""
-    supabase = get_supabase_client()
-    data = {k: v for k, v in usuario.model_dump().items() if v is not None}
-    response = supabase.table("usuarios").update(data).eq("id", usuario_id).execute()
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return response.data[0]
-
-
-@router.delete("/{usuario_id}", status_code=204, summary="Eliminar un usuario")
-async def eliminar_usuario(usuario_id: str):
-    """Elimina un usuario del sistema por su ID."""
-    supabase = get_supabase_client()
-    supabase.table("usuarios").delete().eq("id", usuario_id).execute()
-    return None
-
+# ── Rutas estáticas ANTES de las dinámicas (evitar conflicto con /{usuario_id}) ──
 
 @router.get("/tecnicos/activos", summary="Listar técnicos activos")
-async def listar_tecnicos_activos():
+def listar_tecnicos_activos():
     """
     Retorna todos los usuarios con rol 'tecnico' y estado 'Activo'.
     Usado por el frontend en la solicitud de inspección (asignación de técnico).
+    NOTA: Esta ruta debe estar ANTES de /{usuario_id} para evitar conflictos.
     """
     supabase = get_supabase_client()
     response = (
@@ -108,8 +74,46 @@ async def listar_tecnicos_activos():
     return response.data
 
 
+@router.get("/{usuario_id}", summary="Obtener un usuario por ID")
+def obtener_usuario(usuario_id: str):
+    """Retorna un usuario específico por su ID."""
+    supabase = get_supabase_client()
+    response = supabase.table("usuarios").select("*").eq("id", usuario_id).execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return response.data[0]
+
+
+@router.post("/", status_code=201, summary="Crear un nuevo usuario")
+def crear_usuario(usuario: UsuarioCreate):
+    """Crea un nuevo usuario en el sistema."""
+    supabase = get_supabase_client()
+    response = supabase.table("usuarios").insert(usuario.model_dump()).execute()
+    return response.data[0]
+
+
+@router.put("/{usuario_id}", summary="Actualizar un usuario")
+def actualizar_usuario(usuario_id: str, usuario: UsuarioUpdate):
+    """Actualiza los datos de un usuario existente."""
+    supabase = get_supabase_client()
+    data = {k: v for k, v in usuario.model_dump().items() if v is not None}
+    response = supabase.table("usuarios").update(data).eq("id", usuario_id).execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return response.data[0]
+
+
+@router.delete("/{usuario_id}", status_code=204, summary="Eliminar un usuario")
+def eliminar_usuario(usuario_id: str):
+    """Elimina un usuario del sistema por su ID."""
+    supabase = get_supabase_client()
+    supabase.table("usuarios").delete().eq("id", usuario_id).execute()
+    return None
+
+
+
 @router.patch("/{usuario_id}/toggle-estado", summary="Suspender o activar un usuario")
-async def toggle_estado_usuario(usuario_id: str):
+def toggle_estado_usuario(usuario_id: str):
     """
     Alterna el estado de un usuario entre activo e inactivo.
     Equivale a suspender o rehabilitar una cuenta (acción de Admin).

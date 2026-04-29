@@ -53,15 +53,35 @@ class InspeccionResponse(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/", summary="Listar inspecciones")
-async def listar_inspecciones():
+def listar_inspecciones():
     """Retorna todas las inspecciones registradas."""
     supabase = get_supabase_client()
     response = supabase.table("inspecciones").select("*").order("fecha_inspeccion", desc=True).execute()
     return response.data
 
 
+# ── Rutas estáticas ANTES de las dinámicas (evitar conflicto con /{inspeccion_id}) ──
+
+@router.get("/estado/pendientes", summary="Listar inspecciones pendientes")
+def listar_inspecciones_pendientes():
+    """
+    Retorna todas las inspecciones con estado 'pendiente'.
+    Equivale a getInspeccionesPendientes() del frontend.
+    NOTA: Esta ruta debe estar ANTES de /{inspeccion_id} para evitar conflictos.
+    """
+    supabase = get_supabase_client()
+    response = (
+        supabase.table("inspecciones")
+        .select("*, sub_inspecciones(*)")
+        .eq("estado", "pendiente")
+        .order("fecha_inspeccion")
+        .execute()
+    )
+    return response.data
+
+
 @router.get("/{inspeccion_id}", summary="Obtener una inspección por ID")
-async def obtener_inspeccion(inspeccion_id: str):
+def obtener_inspeccion(inspeccion_id: str):
     """Retorna una inspección con sus sub-inspecciones y registros de plantas."""
     supabase = get_supabase_client()
     response = (
@@ -76,7 +96,7 @@ async def obtener_inspeccion(inspeccion_id: str):
 
 
 @router.get("/tecnico/{tecnico_id}", summary="Inspecciones por técnico")
-async def listar_inspecciones_por_tecnico(tecnico_id: str):
+def listar_inspecciones_por_tecnico(tecnico_id: str):
     """Retorna todas las inspecciones asignadas a un técnico."""
     supabase = get_supabase_client()
     response = (
@@ -90,7 +110,7 @@ async def listar_inspecciones_por_tecnico(tecnico_id: str):
 
 
 @router.get("/predio/{predio_id}", summary="Inspecciones por predio")
-async def listar_inspecciones_por_predio(predio_id: str):
+def listar_inspecciones_por_predio(predio_id: str):
     """Retorna todas las inspecciones realizadas en un predio."""
     supabase = get_supabase_client()
     response = (
@@ -104,26 +124,46 @@ async def listar_inspecciones_por_predio(predio_id: str):
 
 
 @router.post("/", status_code=201, summary="Crear una inspección")
-async def crear_inspeccion(inspeccion: InspeccionCreate):
+def crear_inspeccion(inspeccion: InspeccionCreate):
     """
     Crea una nueva inspección fitosanitaria.
     Se inicializa con estado 'pendiente'.
+    Filtra campos que no son columnas de la tabla antes de insertar.
     """
     supabase = get_supabase_client()
     data = inspeccion.model_dump()
     data["estado"] = "pendiente"
     data["fecha_inspeccion"] = str(data["fecha_inspeccion"])
-    response = supabase.table("inspecciones").insert(data).execute()
+
+    # Campos que no son columnas de la tabla inspecciones — excluirlos
+    campos_excluidos = {"tecnico_nombre", "modo_asignacion", "comentarios"}
+    data_limpia = {k: v for k, v in data.items() if k not in campos_excluidos and v is not None}
+
+    # Si no se envió lote_id, intentar asignar el primer lote del predio
+    if not data_limpia.get("lote_id"):
+        lotes = supabase.table("lotes").select("id").eq("predio_id", data_limpia["predio_id"]).limit(1).execute()
+        if lotes.data:
+            data_limpia["lote_id"] = lotes.data[0]["id"]
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="El predio no tiene lotes. Debe crear al menos un lote antes de solicitar una inspección."
+            )
+
+    response = supabase.table("inspecciones").insert(data_limpia).execute()
     return response.data[0]
 
 
 @router.put("/{inspeccion_id}", summary="Actualizar una inspección")
-async def actualizar_inspeccion(inspeccion_id: str, inspeccion: InspeccionUpdate):
+def actualizar_inspeccion(inspeccion_id: str, inspeccion: InspeccionUpdate):
     """Actualiza el estado o datos de una inspección existente."""
     supabase = get_supabase_client()
     data = {k: v for k, v in inspeccion.model_dump().items() if v is not None}
     if "fecha_cierre" in data:
         data["fecha_cierre"] = str(data["fecha_cierre"])
+    # Excluir campos que no son columnas de la tabla
+    campos_excluidos = {"tecnico_nombre", "modo_asignacion"}
+    data = {k: v for k, v in data.items() if k not in campos_excluidos}
     response = supabase.table("inspecciones").update(data).eq("id", inspeccion_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Inspección no encontrada")
@@ -131,7 +171,7 @@ async def actualizar_inspeccion(inspeccion_id: str, inspeccion: InspeccionUpdate
 
 
 @router.delete("/{inspeccion_id}", status_code=204, summary="Eliminar una inspección")
-async def eliminar_inspeccion(inspeccion_id: str):
+def eliminar_inspeccion(inspeccion_id: str):
     """Elimina una inspección y sus registros asociados (cascade)."""
     supabase = get_supabase_client()
     supabase.table("inspecciones").delete().eq("id", inspeccion_id).execute()
@@ -141,24 +181,18 @@ async def eliminar_inspeccion(inspeccion_id: str):
 class AsignacionTecnico(BaseModel):
     """Payload para asignar un técnico a una inspección."""
     tecnico_id: str
-    tecnico_nombre: str
-    modo_asignacion: str = "preferencia"  # 'automatica', 'preferencia'
 
 
 @router.patch("/{inspeccion_id}/asignar-tecnico", summary="Asignar técnico a una inspección")
-async def asignar_tecnico(inspeccion_id: str, asignacion: AsignacionTecnico):
+def asignar_tecnico(inspeccion_id: str, asignacion: AsignacionTecnico):
     """
     Asigna o reasigna un técnico a una inspección existente.
-    Equivale a asignarTecnicoAInspeccion del frontend.
+    Solo actualiza tecnico_id (campo real de la tabla).
     """
     supabase = get_supabase_client()
     response = (
         supabase.table("inspecciones")
-        .update({
-            "tecnico_id": asignacion.tecnico_id,
-            "tecnico_nombre": asignacion.tecnico_nombre,
-            "modo_asignacion": asignacion.modo_asignacion,
-        })
+        .update({"tecnico_id": asignacion.tecnico_id})
         .eq("id", inspeccion_id)
         .execute()
     )
@@ -167,25 +201,10 @@ async def asignar_tecnico(inspeccion_id: str, asignacion: AsignacionTecnico):
     return response.data[0]
 
 
-@router.get("/estado/pendientes", summary="Listar inspecciones pendientes")
-async def listar_inspecciones_pendientes():
-    """
-    Retorna todas las inspecciones con estado 'pendiente'.
-    Equivale a getInspeccionesPendientes() del frontend.
-    """
-    supabase = get_supabase_client()
-    response = (
-        supabase.table("inspecciones")
-        .select("*, sub_inspecciones(*)")
-        .eq("estado", "pendiente")
-        .order("fecha_inspeccion")
-        .execute()
-    )
-    return response.data
 
 
 @router.patch("/{inspeccion_id}/finalizar", summary="Finalizar una inspección completa")
-async def finalizar_inspeccion(inspeccion_id: str, observaciones: Optional[str] = None):
+def finalizar_inspeccion(inspeccion_id: str, observaciones: Optional[str] = None):
     """
     Marca la inspección como 'completada' y opcionalmente guarda las observaciones finales.
     Equivale a finalizarInspeccionCompleta() del frontend.

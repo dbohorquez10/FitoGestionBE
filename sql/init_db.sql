@@ -59,21 +59,37 @@ CREATE TABLE IF NOT EXISTS plagas (
 COMMENT ON TABLE plagas IS 'Catálogo de plagas y enfermedades fitosanitarias.';
 
 -- ╔════════════════════════════════════════════════════════════════════════════╗
+-- ║ TABLA: PLAGA_CULTIVO (Relación Many-to-Many)                            ║
+-- ╚════════════════════════════════════════════════════════════════════════════╝
+CREATE TABLE IF NOT EXISTS plaga_cultivo (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    plaga_id    UUID NOT NULL REFERENCES plagas(id) ON DELETE CASCADE,
+    cultivo_id  UUID NOT NULL REFERENCES cultivos(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(plaga_id, cultivo_id)
+);
+
+COMMENT ON TABLE plaga_cultivo IS 'Relación muchos-a-muchos entre plagas y los cultivos que afectan.';
+CREATE INDEX idx_plaga_cultivo_plaga ON plaga_cultivo(plaga_id);
+CREATE INDEX idx_plaga_cultivo_cultivo ON plaga_cultivo(cultivo_id);
+
+-- ╔════════════════════════════════════════════════════════════════════════════╗
 -- ║ TABLA: PREDIOS                                                           ║
 -- ╚════════════════════════════════════════════════════════════════════════════╝
 CREATE TABLE IF NOT EXISTS predios (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    nombre          VARCHAR(150)  NOT NULL,
-    productor_id    UUID          NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-    departamento    VARCHAR(100)  NOT NULL,
-    municipio       VARCHAR(100)  NOT NULL,
-    vereda          VARCHAR(150),
-    latitud         DECIMAL(10, 7),
-    longitud        DECIMAL(10, 7),
-    area_total      DECIMAL(10, 2),  -- Hectáreas
-    activo          BOOLEAN       DEFAULT TRUE,
-    created_at      TIMESTAMPTZ   DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ   DEFAULT NOW()
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nombre              VARCHAR(150)  NOT NULL,
+    productor_id        UUID          NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    departamento        VARCHAR(100)  NOT NULL,
+    municipio           VARCHAR(100)  NOT NULL,
+    vereda              VARCHAR(150),
+    numero_registro_ica VARCHAR(50),  -- Código de registro ante el ICA
+    latitud             DECIMAL(10, 7),
+    longitud            DECIMAL(10, 7),
+    area_total          DECIMAL(10, 2),  -- Hectáreas
+    activo              BOOLEAN       DEFAULT TRUE,
+    created_at          TIMESTAMPTZ   DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ   DEFAULT NOW()
 );
 
 COMMENT ON TABLE predios IS 'Predios agrícolas vinculados a un productor.';
@@ -248,11 +264,13 @@ ALTER TABLE lotes             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inspecciones      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sub_inspecciones  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE registro_plantas  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE plaga_cultivo     ENABLE ROW LEVEL SECURITY;
 
 -- Política permisiva para service_role (el backend usa la service key)
 CREATE POLICY "Service role full access" ON usuarios          FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON cultivos          FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON plagas            FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access" ON plaga_cultivo     FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON predios           FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON lotes             FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON inspecciones      FOR ALL USING (true) WITH CHECK (true);

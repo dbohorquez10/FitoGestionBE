@@ -1,9 +1,11 @@
 """
 Router de Autenticación.
 Login con email/contraseña usando Supabase Auth, retorna JWT.
+Registro de usuarios con protección de rol admin.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 from app.core.supabase_client import get_supabase_client
 
 router = APIRouter()
@@ -24,7 +26,7 @@ class RegisterRequest(BaseModel):
     nombre: str
     apellido: str
     cedula: str
-    rol: str = "productor"  # 'productor', 'tecnico'
+    rol: str = "productor"  # 'productor', 'tecnico', 'admin'
     telefono: str | None = None
     registro_ica: str | None = None
 
@@ -39,7 +41,7 @@ class TokenResponse(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=TokenResponse, summary="Iniciar sesión")
-async def login(credentials: LoginRequest):
+def login(credentials: LoginRequest):
     """
     Autentica al usuario con email y contraseña.
     Retorna el access_token JWT de Supabase.
@@ -71,12 +73,41 @@ async def login(credentials: LoginRequest):
 
 
 @router.post("/register", status_code=201, summary="Registrar usuario")
-async def register(data: RegisterRequest):
+def register(data: RegisterRequest, authorization: Optional[str] = Header(None)):
     """
     Registra un nuevo usuario en Supabase Auth y crea su perfil
     en la tabla 'usuarios'.
+
+    - Roles 'productor' y 'tecnico': registro público (sin autenticación).
+    - Rol 'admin': requiere JWT de un usuario con rol 'admin' en el header Authorization.
     """
     supabase = get_supabase_client()
+
+    # ── Protección: solo admins pueden crear admins ───────────────────────────
+    if data.rol == "admin":
+        if not authorization:
+            raise HTTPException(
+                status_code=403,
+                detail="No autorizado: se requiere autenticación de administrador para crear cuentas admin."
+            )
+        try:
+            token = authorization.replace("Bearer ", "")
+            auth_user = supabase.auth.get_user(token)
+            if not auth_user or not auth_user.user:
+                raise HTTPException(status_code=403, detail="Token inválido o expirado.")
+
+            # Verificar que el usuario autenticado tiene rol admin
+            perfil = supabase.table("usuarios").select("rol").eq("email", auth_user.user.email).execute()
+            if not perfil.data or perfil.data[0].get("rol") != "admin":
+                raise HTTPException(
+                    status_code=403,
+                    detail="No autorizado: solo los administradores pueden crear cuentas de administrador."
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=403, detail=f"Error de autorización: {str(e)}")
+
     try:
         # 1. Crear en Supabase Auth
         auth_response = supabase.auth.admin.create_user(
@@ -107,7 +138,7 @@ async def register(data: RegisterRequest):
 
 
 @router.post("/logout", status_code=204, summary="Cerrar sesión")
-async def logout():
+def logout():
     """
     Invalida la sesión actual del usuario.
     El cliente debe eliminar el token localmente.
@@ -118,7 +149,7 @@ async def logout():
 
 
 @router.get("/me", summary="Obtener perfil del usuario autenticado")
-async def me(authorization: str = ""):
+def me(authorization: str = ""):
     """
     Retorna el perfil del usuario actual a partir del token JWT.
     El token debe enviarse en el header Authorization: Bearer <token>

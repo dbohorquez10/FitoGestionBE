@@ -46,7 +46,7 @@ class ResumenFitosanitario(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/sub-inspeccion/{sub_inspeccion_id}", summary="Listar registros de una sub-inspección")
-async def listar_registros_plantas(sub_inspeccion_id: str):
+def listar_registros_plantas(sub_inspeccion_id: str):
     """Retorna todos los registros de plantas de una sub-inspección."""
     supabase = get_supabase_client()
     response = (
@@ -60,7 +60,7 @@ async def listar_registros_plantas(sub_inspeccion_id: str):
 
 
 @router.get("/{registro_id}", summary="Obtener registro de planta por ID")
-async def obtener_registro_planta(registro_id: str):
+def obtener_registro_planta(registro_id: str):
     """Retorna un registro específico de planta inspeccionada."""
     supabase = get_supabase_client()
     response = (
@@ -75,7 +75,7 @@ async def obtener_registro_planta(registro_id: str):
 
 
 @router.post("/", status_code=201, summary="Registrar una planta inspeccionada")
-async def crear_registro_planta(registro: RegistroPlantaCreate):
+def crear_registro_planta(registro: RegistroPlantaCreate):
     """Registra una planta individual dentro de una sub-inspección."""
     supabase = get_supabase_client()
     response = supabase.table("registro_plantas").insert(registro.model_dump()).execute()
@@ -83,7 +83,7 @@ async def crear_registro_planta(registro: RegistroPlantaCreate):
 
 
 @router.post("/bulk", status_code=201, summary="Registrar múltiples plantas")
-async def crear_registros_bulk(registros: List[RegistroPlantaCreate]):
+def crear_registros_bulk(registros: List[RegistroPlantaCreate]):
     """
     Registra múltiples plantas de una sola vez (bulk insert).
     Útil para registro masivo durante el muestreo en campo.
@@ -95,7 +95,7 @@ async def crear_registros_bulk(registros: List[RegistroPlantaCreate]):
 
 
 @router.put("/{registro_id}", summary="Actualizar registro de planta")
-async def actualizar_registro_planta(registro_id: str, registro: RegistroPlantaUpdate):
+def actualizar_registro_planta(registro_id: str, registro: RegistroPlantaUpdate):
     """Actualiza los datos de un registro de planta existente."""
     supabase = get_supabase_client()
     data = {k: v for k, v in registro.model_dump().items() if v is not None}
@@ -111,7 +111,7 @@ async def actualizar_registro_planta(registro_id: str, registro: RegistroPlantaU
 
 
 @router.delete("/{registro_id}", status_code=204, summary="Eliminar registro de planta")
-async def eliminar_registro_planta(registro_id: str):
+def eliminar_registro_planta(registro_id: str):
     """Elimina un registro individual de planta."""
     supabase = get_supabase_client()
     supabase.table("registro_plantas").delete().eq("id", registro_id).execute()
@@ -123,7 +123,7 @@ async def eliminar_registro_planta(registro_id: str):
     summary="Resumen fitosanitario de una sub-inspección",
     response_model=ResumenFitosanitario,
 )
-async def resumen_fitosanitario(sub_inspeccion_id: str):
+def resumen_fitosanitario(sub_inspeccion_id: str):
     """
     Calcula y retorna el resumen fitosanitario de una sub-inspección.
     Incluye conteos de plantas por estado y porcentaje de incidencia.
@@ -181,7 +181,7 @@ class AlertaResponse(BaseModel):
     summary="Obtener nivel de alerta por cultivo y plaga",
     response_model=AlertaResponse,
 )
-async def obtener_alerta_fitosanitaria(cultivo_id: str, plaga_id: str):
+def obtener_alerta_fitosanitaria(cultivo_id: str, plaga_id: str):
     """
     Calcula el nivel de alerta fitosanitaria para un cultivo y plaga específicos.
     Basado en el promedio de incidencia de las inspecciones.

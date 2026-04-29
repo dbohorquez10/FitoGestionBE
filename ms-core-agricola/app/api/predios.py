@@ -36,10 +36,25 @@ class PredioUpdate(BaseModel):
     area_total: Optional[float] = None
 
 
+class PredioBatchRequest(BaseModel):
+    """Esquema para solicitar múltiples predios por sus IDs."""
+    ids: list[str]
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+
+@router.post("/batch", summary="Obtener múltiples predios por IDs")
+def obtener_predios_batch(request: PredioBatchRequest):
+    """Retorna múltiples predios en una sola petición. Elimina el problema N+1 del frontend."""
+    if not request.ids:
+        return []
+    supabase = get_supabase_client()
+    response = supabase.table("predios").select("*").in_("id", request.ids).execute()
+    return response.data
+
 @router.get("/", summary="Listar predios")
-async def listar_predios():
+def listar_predios():
     """Retorna todos los predios registrados."""
     supabase = get_supabase_client()
     response = supabase.table("predios").select("*").execute()
@@ -47,7 +62,7 @@ async def listar_predios():
 
 
 @router.get("/{predio_id}", summary="Obtener un predio por ID")
-async def obtener_predio(predio_id: str):
+def obtener_predio(predio_id: str):
     """Retorna un predio específico con sus lotes asociados."""
     supabase = get_supabase_client()
     response = supabase.table("predios").select("*, lotes(*)").eq("id", predio_id).execute()
@@ -57,7 +72,7 @@ async def obtener_predio(predio_id: str):
 
 
 @router.get("/productor/{productor_id}", summary="Listar predios de un productor")
-async def listar_predios_por_productor(productor_id: str):
+def listar_predios_por_productor(productor_id: str):
     """Retorna todos los predios de un productor específico."""
     supabase = get_supabase_client()
     response = supabase.table("predios").select("*").eq("productor_id", productor_id).execute()
@@ -65,7 +80,7 @@ async def listar_predios_por_productor(productor_id: str):
 
 
 @router.post("/", status_code=201, summary="Crear un predio")
-async def crear_predio(predio: PredioCreate):
+def crear_predio(predio: PredioCreate):
     """Registra un nuevo predio agrícola."""
     supabase = get_supabase_client()
     response = supabase.table("predios").insert(predio.model_dump()).execute()
@@ -73,7 +88,7 @@ async def crear_predio(predio: PredioCreate):
 
 
 @router.put("/{predio_id}", summary="Actualizar un predio")
-async def actualizar_predio(predio_id: str, predio: PredioUpdate):
+def actualizar_predio(predio_id: str, predio: PredioUpdate):
     """Actualiza los datos de un predio existente."""
     supabase = get_supabase_client()
     data = {k: v for k, v in predio.model_dump().items() if v is not None}
@@ -84,7 +99,7 @@ async def actualizar_predio(predio_id: str, predio: PredioUpdate):
 
 
 @router.delete("/{predio_id}", status_code=204, summary="Eliminar un predio")
-async def eliminar_predio(predio_id: str):
+def eliminar_predio(predio_id: str):
     """Elimina un predio del sistema."""
     supabase = get_supabase_client()
     supabase.table("predios").delete().eq("id", predio_id).execute()
