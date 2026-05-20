@@ -20,6 +20,9 @@ class UsuarioCreate(BaseModel):
     rol: str  # 'admin', 'tecnico', 'productor'
     telefono: Optional[str] = None
     registro_ica: Optional[str] = None  # Solo para técnicos
+    departamento: Optional[str] = None
+    municipio: Optional[str] = None
+    vereda: Optional[str] = None
 
 
 class UsuarioUpdate(BaseModel):
@@ -30,6 +33,9 @@ class UsuarioUpdate(BaseModel):
     telefono: Optional[str] = None
     rol: Optional[str] = None
     registro_ica: Optional[str] = None
+    departamento: Optional[str] = None
+    municipio: Optional[str] = None
+    vereda: Optional[str] = None
 
 
 class UsuarioResponse(BaseModel):
@@ -42,6 +48,9 @@ class UsuarioResponse(BaseModel):
     rol: str
     telefono: Optional[str] = None
     registro_ica: Optional[str] = None
+    departamento: Optional[str] = None
+    municipio: Optional[str] = None
+    vereda: Optional[str] = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────

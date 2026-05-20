@@ -54,10 +54,10 @@ def obtener_predios_batch(request: PredioBatchRequest):
     return response.data
 
 @router.get("/", summary="Listar predios")
-def listar_predios():
+def listar_predios(skip: int = 0, limit: int = 100):
     """Retorna todos los predios registrados."""
     supabase = get_supabase_client()
-    response = supabase.table("predios").select("*").execute()
+    response = supabase.table("predios").select("*").range(skip, skip + limit - 1).execute()
     return response.data
 
 

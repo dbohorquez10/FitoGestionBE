@@ -53,10 +53,10 @@ class InspeccionResponse(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/", summary="Listar inspecciones")
-def listar_inspecciones():
+def listar_inspecciones(skip: int = 0, limit: int = 100):
     """Retorna todas las inspecciones registradas."""
     supabase = get_supabase_client()
-    response = supabase.table("inspecciones").select("*").order("fecha_inspeccion", desc=True).execute()
+    response = supabase.table("inspecciones").select("*").order("fecha_inspeccion", desc=True).range(skip, skip + limit - 1).execute()
     return response.data
 
 
@@ -224,4 +224,17 @@ def finalizar_inspeccion(inspeccion_id: str, observaciones: Optional[str] = None
     if not response.data:
         raise HTTPException(status_code=404, detail="Inspección no encontrada")
     return response.data[0]
+
+
+@router.get("/{inspeccion_id}/informe", summary="Generar Informe Fitosanitario")
+def generar_informe_inspeccion(inspeccion_id: str):
+    """
+    Genera un informe consolidado de la inspección llamando a un Stored Procedure en Supabase.
+    """
+    supabase = get_supabase_client()
+    try:
+        response = supabase.rpc("fn_generar_informe_inspeccion", {"p_inspeccion_id": inspeccion_id}).execute()
+        return response.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando informe: {str(e)}")
 

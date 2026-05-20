@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
     rol           VARCHAR(20)   NOT NULL CHECK (rol IN ('admin', 'tecnico', 'productor')),
     telefono      VARCHAR(20),
     registro_ica  VARCHAR(50),  -- Solo para técnicos
+    departamento  VARCHAR(100),
+    municipio     VARCHAR(100),
+    vereda        VARCHAR(150),
     activo        BOOLEAN       DEFAULT TRUE,
     created_at    TIMESTAMPTZ   DEFAULT NOW(),
     updated_at    TIMESTAMPTZ   DEFAULT NOW()
@@ -94,6 +97,8 @@ CREATE TABLE IF NOT EXISTS predios (
 
 COMMENT ON TABLE predios IS 'Predios agrícolas vinculados a un productor.';
 CREATE INDEX idx_predios_productor ON predios(productor_id);
+CREATE INDEX idx_predios_region ON predios(departamento, municipio);
+CREATE INDEX idx_usuarios_region ON usuarios(departamento, municipio);
 
 -- ╔════════════════════════════════════════════════════════════════════════════╗
 -- ║ TABLA: LOTES                                                             ║
@@ -276,3 +281,57 @@ CREATE POLICY "Service role full access" ON lotes             FOR ALL USING (tru
 CREATE POLICY "Service role full access" ON inspecciones      FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON sub_inspecciones  FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON registro_plantas  FOR ALL USING (true) WITH CHECK (true);
+
+-- ╔════════════════════════════════════════════════════════════════════════════╗
+-- ║ FUNCIÓN: Generar Informe Fitosanitario                                     ║
+-- ╚════════════════════════════════════════════════════════════════════════════╝
+CREATE OR REPLACE FUNCTION fn_generar_informe_inspeccion(p_inspeccion_id UUID)
+RETURNS JSON AS $$
+DECLARE
+    v_informe JSON;
+    v_total_plantas_evaluadas INT;
+    v_total_plantas_enfermas INT;
+    v_porcentaje_incidencia DECIMAL;
+    v_nivel_alerta VARCHAR(50);
+BEGIN
+    -- Calcular totales
+    SELECT 
+        COALESCE(SUM(plantas_evaluadas), 0) INTO v_total_plantas_evaluadas
+    FROM sub_inspecciones
+    WHERE inspeccion_id = p_inspeccion_id;
+
+    SELECT 
+        COUNT(*) INTO v_total_plantas_enfermas
+    FROM registro_plantas rp
+    JOIN sub_inspecciones si ON rp.sub_inspeccion_id = si.id
+    WHERE si.inspeccion_id = p_inspeccion_id AND rp.estado_planta IN ('enferma', 'muerta');
+
+    -- Calcular incidencia
+    IF v_total_plantas_evaluadas > 0 THEN
+        v_porcentaje_incidencia := (v_total_plantas_enfermas::DECIMAL / v_total_plantas_evaluadas) * 100;
+    ELSE
+        v_porcentaje_incidencia := 0;
+    END IF;
+
+    -- Determinar nivel de alerta
+    IF v_porcentaje_incidencia >= 15.0 THEN
+        v_nivel_alerta := 'Crítico (Cuarentena Recomendada)';
+    ELSIF v_porcentaje_incidencia >= 5.0 THEN
+        v_nivel_alerta := 'Alerta (Tratamiento Requerido)';
+    ELSE
+        v_nivel_alerta := 'Normal (Monitoreo)';
+    END IF;
+
+    -- Construir JSON de respuesta
+    SELECT json_build_object(
+        'inspeccion_id', p_inspeccion_id,
+        'fecha_generacion', NOW(),
+        'plantas_evaluadas', v_total_plantas_evaluadas,
+        'plantas_afectadas', v_total_plantas_enfermas,
+        'incidencia_global_pct', ROUND(v_porcentaje_incidencia, 2),
+        'nivel_alerta', v_nivel_alerta
+    ) INTO v_informe;
+
+    RETURN v_informe;
+END;
+$$ LANGUAGE plpgsql;
