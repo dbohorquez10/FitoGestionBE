@@ -15,6 +15,7 @@ class PredioCreate(BaseModel):
     """Esquema para registrar un predio."""
     nombre: str
     productor_id: str
+    lugar_id: Optional[str] = None
     departamento: str
     municipio: str
     vereda: Optional[str] = None
@@ -61,6 +62,14 @@ def listar_predios(skip: int = 0, limit: int = 100):
     return response.data
 
 
+@router.get("/productor/{productor_id}", summary="Listar predios de un productor")
+def listar_predios_por_productor(productor_id: str):
+    """Retorna todos los predios de un productor específico."""
+    supabase = get_supabase_client()
+    response = supabase.table("predios").select("*").eq("productor_id", productor_id).execute()
+    return response.data
+
+
 @router.get("/{predio_id}", summary="Obtener un predio por ID")
 def obtener_predio(predio_id: str):
     """Retorna un predio específico con sus lotes asociados."""
@@ -70,13 +79,6 @@ def obtener_predio(predio_id: str):
         raise HTTPException(status_code=404, detail="Predio no encontrado")
     return response.data[0]
 
-
-@router.get("/productor/{productor_id}", summary="Listar predios de un productor")
-def listar_predios_por_productor(productor_id: str):
-    """Retorna todos los predios de un productor específico."""
-    supabase = get_supabase_client()
-    response = supabase.table("predios").select("*").eq("productor_id", productor_id).execute()
-    return response.data
 
 
 @router.post("/", status_code=201, summary="Crear un predio")

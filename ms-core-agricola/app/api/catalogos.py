@@ -17,6 +17,8 @@ class PlagaCreate(BaseModel):
     nombre_cientifico: Optional[str] = None
     tipo: str  # 'insecto', 'hongo', 'bacteria', 'virus', 'nematodo', 'maleza'
     descripcion: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
     cultivos_afectados: Optional[List[str]] = []  # Lista de IDs de cultivos (se insertan en plaga_cultivo)
 
 
@@ -74,6 +76,34 @@ def crear_plaga(plaga: PlagaCreate):
             pass  # tabla plaga_cultivo aún no existe
 
     return nueva_plaga
+
+
+@router.get("/plagas/por-cultivo/{cultivo_id}", summary="Plagas asociadas a un cultivo")
+def listar_plagas_por_cultivo(cultivo_id: str):
+    """
+    Retorna todas las plagas que afectan a un cultivo específico.
+    Equivale a getPlagasByPrediosCultivos(cultivoId) del frontend.
+    Usa la tabla de relación 'plaga_cultivo' (many-to-many).
+    """
+    supabase = get_supabase_client()
+    # Obtener IDs de plagas que afectan el cultivo
+    rel = (
+        supabase.table("plaga_cultivo")
+        .select("plaga_id")
+        .eq("cultivo_id", cultivo_id)
+        .execute()
+    )
+    plaga_ids = [r["plaga_id"] for r in rel.data]
+    if not plaga_ids:
+        return []
+    # Obtener el detalle de cada plaga
+    response = (
+        supabase.table("plagas")
+        .select("*")
+        .in_("id", plaga_ids)
+        .execute()
+    )
+    return response.data
 
 
 @router.get("/plagas/{plaga_id}", summary="Obtener plaga por ID")
@@ -173,29 +203,3 @@ def eliminar_cultivo(cultivo_id: str):
     return None
 
 
-@router.get("/plagas/por-cultivo/{cultivo_id}", summary="Plagas asociadas a un cultivo")
-def listar_plagas_por_cultivo(cultivo_id: str):
-    """
-    Retorna todas las plagas que afectan a un cultivo específico.
-    Equivale a getPlagasByPrediosCultivos(cultivoId) del frontend.
-    Usa la tabla de relación 'plaga_cultivo' (many-to-many).
-    """
-    supabase = get_supabase_client()
-    # Obtener IDs de plagas que afectan el cultivo
-    rel = (
-        supabase.table("plaga_cultivo")
-        .select("plaga_id")
-        .eq("cultivo_id", cultivo_id)
-        .execute()
-    )
-    plaga_ids = [r["plaga_id"] for r in rel.data]
-    if not plaga_ids:
-        return []
-    # Obtener el detalle de cada plaga
-    response = (
-        supabase.table("plagas")
-        .select("*")
-        .in_("id", plaga_ids)
-        .execute()
-    )
-    return response.data

@@ -29,6 +29,9 @@ class RegisterRequest(BaseModel):
     rol: str = "productor"  # 'productor', 'tecnico', 'admin'
     telefono: str | None = None
     registro_ica: str | None = None
+    departamento: str | None = None
+    municipio: str | None = None
+    vereda: str | None = None
 
 
 class TokenResponse(BaseModel):
@@ -48,8 +51,9 @@ def login(credentials: LoginRequest):
     """
     supabase = get_supabase_client()
     try:
+        email_lower = credentials.email.lower()
         response = supabase.auth.sign_in_with_password(
-            {"email": credentials.email, "password": credentials.password}
+            {"email": email_lower, "password": credentials.password}
         )
         session = response.session
         user = response.user
@@ -57,7 +61,7 @@ def login(credentials: LoginRequest):
             raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
         # Obtener perfil adicional del usuario desde la tabla usuarios
-        perfil = supabase.table("usuarios").select("*").eq("email", credentials.email).execute()
+        perfil = supabase.table("usuarios").select("*").eq("email", email_lower).execute()
         perfil_data = perfil.data[0] if perfil.data else {}
 
         return TokenResponse(
@@ -109,6 +113,7 @@ def register(data: RegisterRequest, authorization: Optional[str] = Header(None))
             raise HTTPException(status_code=403, detail=f"Error de autorización: {str(e)}")
 
     try:
+        data.email = data.email.lower()
         # 1. Crear en Supabase Auth
         auth_response = supabase.auth.admin.create_user(
             {
@@ -129,6 +134,9 @@ def register(data: RegisterRequest, authorization: Optional[str] = Header(None))
             "rol": data.rol,
             "telefono": data.telefono,
             "registro_ica": data.registro_ica,
+            "departamento": data.departamento,
+            "municipio": data.municipio,
+            "vereda": data.vereda,
         }
         supabase.table("usuarios").insert(perfil).execute()
 
@@ -149,11 +157,13 @@ def logout():
 
 
 @router.get("/me", summary="Obtener perfil del usuario autenticado")
-def me(authorization: str = ""):
+def me(authorization: Optional[str] = Header(None)):
     """
     Retorna el perfil del usuario actual a partir del token JWT.
     El token debe enviarse en el header Authorization: Bearer <token>
     """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Se requiere token de autenticación")
     supabase = get_supabase_client()
     try:
         user = supabase.auth.get_user(authorization.replace("Bearer ", ""))

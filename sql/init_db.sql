@@ -335,3 +335,83 @@ BEGIN
     RETURN v_informe;
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- ╔════════════════════════════════════════════════════════════════════════════╗
+-- ║ DATOS SEMILLA (SEED DATA)                                                ║
+-- ╚════════════════════════════════════════════════════════════════════════════╝
+
+-- 1. Insertar Cultivos
+INSERT INTO cultivos (id, nombre, nombre_cientifico, variedad, descripcion, activo) VALUES
+('c0011111-1111-1111-1111-111111111111', 'Cítricos', 'Citrus spp.', 'Limón Tahití', 'Cultivo de cítricos para exportación de limón y naranja dulce.', true),
+('c0022222-2222-2222-2222-222222222222', 'Aguacate', 'Persea americana', 'Hass', 'Aguacate tipo Hass cultivado para mercados nacionales e internacionales.', true),
+('c0033333-3333-3333-3333-333333333333', 'Café', 'Coffea arabica', 'Castillo', 'Café especial Castillo de alta resistencia a la roya.', true),
+('c0044444-4444-4444-4444-444444444444', 'Cacao', 'Theobroma cacao', 'CCN51', 'Cacao de alta productividad y fermentación controlada.', true),
+('c0055555-5555-5555-5555-555555555555', 'Plátano', 'Musa paradisiaca', 'Hartón', 'Plátano clon Hartón utilizado como sombrío temporal y producción.', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. Insertar Plagas
+INSERT INTO plagas (id, nombre_comun, nombre_cientifico, tipo, descripcion, activo) VALUES
+('f0011111-1111-1111-1111-111111111111', 'Diaphorina citri (Psílido asiático)', 'Diaphorina citri', 'insecto', 'Vector de la bacteria Candidatus Liberibacter que causa el HLB de los cítricos.', true),
+('f0022222-2222-2222-2222-222222222222', 'Pudrición del cogollo / Raíz', 'Phytophthora cinnamomi', 'hongo', 'Hongo patógeno que causa pudrición radicular en aguacate y cítricos.', true),
+('f0033333-3333-3333-3333-333333333333', 'Broca del Café', 'Hypothenemus hampei', 'insecto', 'Plaga principal que perfora el grano de café afectando calidad y rendimiento.', true),
+('f0044444-4444-4444-4444-444444444444', 'Moniliasis del Cacao', 'Moniliophthora roreri', 'hongo', 'Enfermedad limitante que pudre la mazorca de cacao internamente.', true),
+('f0055555-5555-5555-5555-555555555555', 'Moko del Plátano', 'Ralstonia solanacearum', 'bacteria', 'Marchitez bacteriana sistémica que destruye plantas de musáceas.', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 3. Insertar Relaciones Plaga-Cultivo
+INSERT INTO plaga_cultivo (plaga_id, cultivo_id) VALUES
+('f0011111-1111-1111-1111-111111111111', 'c0011111-1111-1111-1111-111111111111'), -- Diaphorina en Cítricos
+('f0022222-2222-2222-2222-222222222222', 'c0022222-2222-2222-2222-222222222222'), -- Phytophthora en Aguacate
+('f0022222-2222-2222-2222-222222222222', 'c0011111-1111-1111-1111-111111111111'), -- Phytophthora en Cítricos
+('f0033333-3333-3333-3333-333333333333', 'c0033333-3333-3333-3333-333333333333'), -- Broca en Café
+('f0044444-4444-4444-4444-444444444444', 'c0044444-4444-4444-4444-444444444444'), -- Monilia en Cacao
+('f0055555-5555-5555-5555-555555555555', 'c0055555-5555-5555-5555-555555555555')  -- Moko en Plátano
+ON CONFLICT DO NOTHING;
+
+-- 4. Insertar Usuarios
+INSERT INTO usuarios (id, nombre, apellido, email, cedula, rol, telefono, registro_ica, departamento, municipio, vereda, activo) VALUES
+('e0011111-1111-1111-1111-111111111111', 'Luis Ernesto', 'Vargas', 'admin@fitogestion.co', '1098765430', 'admin', '3001234560', 'ICA-ADM-01', 'Santander', 'Bucaramanga', 'Central', true),
+('e0022222-2222-2222-2222-222222222222', 'Roberto', 'Pérez', 'tecnico_santander@fitogestion.co', '1098765431', 'tecnico', '3001234561', 'ICA-TEC-SAN-01', 'Santander', 'Lebrija', 'La Renta', true),
+('e0033333-3333-3333-3333-333333333333', 'Silvia', 'Gómez', 'tecnico_antioquia@fitogestion.co', '1098765432', 'tecnico', '3001234562', 'ICA-TEC-ANT-02', 'Antioquia', 'Medellín', 'Poblado', true),
+('e0044444-4444-4444-4444-444444444444', 'Carlos', 'Martínez', 'tecnico_cundinamarca@fitogestion.co', '1098765433', 'tecnico', '3001234563', 'ICA-TEC-CUN-03', 'Cundinamarca', 'Fusagasugá', 'Chinauta', true),
+('e0055555-5555-5555-5555-555555555555', 'Darwing', 'Jaimes', 'productor_santander@fitogestion.co', '1098765434', 'productor', '3001234564', null, 'Santander', 'Lebrija', 'La Esmeralda', true),
+('e0066666-6666-6666-6666-666666666666', 'María Camila', 'Díaz', 'productor_antioquia@fitogestion.co', '1098765435', 'productor', '3001234565', null, 'Antioquia', 'Jericó', 'Quebradona', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 5. Insertar Predios
+INSERT INTO predios (id, nombre, productor_id, departamento, municipio, vereda, numero_registro_ica, latitud, longitud, area_total, activo) VALUES
+('d0011111-1111-1111-1111-111111111111', 'Finca La Esmeralda', 'e0055555-5555-5555-5555-555555555555', 'Santander', 'Lebrija', 'La Esmeralda', 'REG-ICA-SAN-5544', 7.1118, -73.2201, 12.50, true),
+('d0022222-2222-2222-2222-222222222222', 'Hacienda El Recreo', 'e0066666-6666-6666-6666-666666666666', 'Antioquia', 'Jericó', 'Quebradona', 'REG-ICA-ANT-9988', 5.7915, -75.7820, 24.80, true),
+('d0033333-3333-3333-3333-333333333333', 'Finca El Recuerdo', 'e0055555-5555-5555-5555-555555555555', 'Santander', 'Lebrija', 'Cantabria', 'REG-ICA-SAN-7766', 7.1250, -73.2315, 8.20, true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 6. Insertar Lotes
+INSERT INTO lotes (id, predio_id, nombre, cultivo_id, area, num_plantas, estado) VALUES
+('b0011111-1111-1111-1111-111111111111', 'd0011111-1111-1111-1111-111111111111', 'Lote Limón 01', 'c0011111-1111-1111-1111-111111111111', 4.50, 1200, 'Óptimo'),
+('b0011111-2222-1111-1111-111111111111', 'd0011111-1111-1111-1111-111111111111', 'Lote Naranja Valencia', 'c0011111-1111-1111-1111-111111111111', 3.00, 800, 'Alerta'),
+('b0022222-1111-2222-2222-222222222222', 'd0022222-2222-2222-2222-222222222222', 'Lote Aguacate Hass 01', 'c0022222-2222-2222-2222-222222222222', 15.00, 3200, 'Óptimo'),
+('b0033333-1111-3333-3333-333333333333', 'd0033333-3333-3333-3333-333333333333', 'Lote Café Castillo', 'c0033333-3333-3333-3333-333333333333', 6.00, 5000, 'Óptimo')
+ON CONFLICT (id) DO NOTHING;
+
+-- 7. Insertar Inspecciones
+INSERT INTO inspecciones (id, tecnico_id, predio_id, lote_id, fecha_inspeccion, tipo_inspeccion, estado, observaciones, resultado_general, fecha_cierre) VALUES
+('a0011111-1111-1111-1111-111111111111', 'e0022222-2222-2222-2222-222222222222', 'd0011111-1111-1111-1111-111111111111', 'b0011111-1111-1111-1111-111111111111', '2026-05-10', 'rutinaria', 'completada', 'Se observan plantas en buen estado general. Muestreos en hoja negativos para plagas de control oficial.', 'sin_novedad', '2026-05-10'),
+('a0022222-2222-2222-2222-222222222222', 'e0033333-3333-3333-3333-333333333333', 'd0022222-2222-2222-2222-222222222222', 'b0022222-1111-2222-2222-222222222222', '2026-05-15', 'seguimiento', 'completada', 'Focos aislados de Phytophthora detectados en raíces. Se prescribe drenaje y fungicida localizado.', 'con_hallazgos', '2026-05-15'),
+('a0033333-3333-3333-3333-333333333333', 'e0022222-2222-2222-2222-222222222222', 'd0011111-1111-1111-1111-111111111111', 'b0011111-2222-1111-1111-111111111111', '2026-05-20', 'emergencia', 'pendiente', 'Reporte de posible presencia de psílido Diaphorina citri en hojas terminales. Pendiente visita de campo.', null, null)
+ON CONFLICT (id) DO NOTHING;
+
+-- 8. Insertar Sub-Inspecciones
+INSERT INTO sub_inspecciones (id, inspeccion_id, codigo_punto, ubicacion_referencia, observaciones, estado, plantas_evaluadas) VALUES
+('90011111-1111-1111-1111-111111111111', 'a0011111-1111-1111-1111-111111111111', 'PUNTO-01', 'Coordenadas norte del lote 1', 'Muestreo de 5 árboles. Sin novedades.', 'completado', 5),
+('90022222-2222-2222-2222-222222222222', 'a0022222-2222-2222-2222-222222222222', 'PUNTO-HASS-01', 'Cerca al canal de drenaje', 'Presencia de síntomas de marchitez en hojas.', 'completado', 5)
+ON CONFLICT (id) DO NOTHING;
+
+-- 9. Insertar Registro de Plantas
+INSERT INTO registro_plantas (id, sub_inspeccion_id, numero_planta, plaga_id, sintoma, severidad, incidencia, estado_planta, observaciones) VALUES
+('80011111-1111-1111-1111-111111111111', '90011111-1111-1111-1111-111111111111', 1, null, 'Ninguno', null, 0.00, 'sana', 'Árbol sano y vigoroso.'),
+('80011111-2222-1111-1111-111111111111', '90011111-1111-1111-1111-111111111111', 2, null, 'Ninguno', null, 0.00, 'sana', 'Árbol sano y vigoroso.'),
+('80022222-1111-2222-2222-222222222222', '90022222-2222-2222-2222-222222222222', 1, 'f0022222-2222-2222-2222-222222222222', 'Marchitez radicular y clorosis', 'moderado', 20.00, 'enferma', 'Clorosis generalizada por encharcamiento en raíces.'),
+('80022222-2222-2222-2222-222222222222', '90022222-2222-2222-2222-222222222222', 2, 'f0022222-2222-2222-2222-222222222222', 'Necrosis foliar y marchitez severa', 'severo', 40.00, 'enferma', 'Afectación severa de hongos fitopatógenos en cuello del tallo.')
+ON CONFLICT (id) DO NOTHING;
+

@@ -4,7 +4,7 @@ Registra los routers de Usuarios, Catálogos, Predios y Lotes.
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import usuarios, catalogos, predios, lotes, auth
+from app.api import usuarios, catalogos, predios, lotes, auth, lugares, notificaciones
 
 app = FastAPI(
     title="FitoGestión — MS Core Agrícola",
@@ -29,4 +29,6 @@ app.include_router(auth.router, prefix="/auth", tags=["Autenticación"])
 app.include_router(usuarios.router, prefix="/usuarios", tags=["Usuarios"])
 app.include_router(catalogos.router, prefix="/catalogos", tags=["Catálogos"])
 app.include_router(predios.router, prefix="/predios", tags=["Predios"])
+app.include_router(lugares.router, prefix="/lugares", tags=["Lugares de Producción"])
 app.include_router(lotes.router, prefix="/lotes", tags=["Lotes"])
+app.include_router(notificaciones.router, prefix="/notificaciones", tags=["Notificaciones"])
