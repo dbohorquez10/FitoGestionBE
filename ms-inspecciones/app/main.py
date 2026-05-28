@@ -13,8 +13,18 @@ app = FastAPI(
 )
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-# NOTA: CORS es manejado globalmente por el API Gateway (Nginx).
-# No añadir CORSMiddleware aquí para evitar duplicación de cabeceras.
+# NOTA: En desarrollo local Nginx filtra estas cabeceras para evitar duplicidad.
+# En producción/Railway directo, CORSMiddleware gestiona el acceso desde orígenes específicos.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:4200",
+        "https://ica-5.vercel.app"
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+)
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────
