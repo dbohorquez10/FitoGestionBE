@@ -6,7 +6,7 @@ Registro de usuarios con protección de rol admin.
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from app.core.supabase_client import get_supabase_client
+from app.core.supabase_client import get_supabase_client, get_supabase_admin_client
 
 router = APIRouter()
 
@@ -114,8 +114,9 @@ def register(data: RegisterRequest, authorization: Optional[str] = Header(None))
 
     try:
         data.email = data.email.lower()
-        # 1. Crear en Supabase Auth
-        auth_response = supabase.auth.admin.create_user(
+        # 1. Crear en Supabase Auth (requiere service_role key)
+        admin_client = get_supabase_admin_client()
+        auth_response = admin_client.auth.admin.create_user(
             {
                 "email": data.email,
                 "password": data.password,
@@ -141,6 +142,8 @@ def register(data: RegisterRequest, authorization: Optional[str] = Header(None))
         supabase.table("usuarios").insert(perfil).execute()
 
         return {"message": "Usuario registrado exitosamente", "id": user_id}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error al registrar usuario: {str(e)}")
 

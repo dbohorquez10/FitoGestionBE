@@ -60,22 +60,27 @@ def crear_plaga(plaga: PlagaCreate):
     Si se proporcionan cultivos_afectados, se insertan en la tabla plaga_cultivo.
     """
     supabase = get_supabase_client()
-    # Separar cultivos_afectados del payload principal (no es columna de la tabla plagas)
-    cultivos_ids = plaga.cultivos_afectados or []
-    plaga_data = plaga.model_dump(exclude={"cultivos_afectados"})
-    response = supabase.table("plagas").insert(plaga_data).execute()
-    nueva_plaga = response.data[0]
+    try:
+        # Separar cultivos_afectados del payload principal (no es columna de la tabla plagas)
+        cultivos_ids = plaga.cultivos_afectados or []
+        plaga_data = plaga.model_dump(exclude={"cultivos_afectados"})
+        response = supabase.table("plagas").insert(plaga_data).execute()
+        nueva_plaga = response.data[0]
 
-    # Insertar relaciones many-to-many en plaga_cultivo
-    if cultivos_ids:
-        try:
-            relaciones = [{"plaga_id": nueva_plaga["id"], "cultivo_id": cid} for cid in cultivos_ids]
-            supabase.table("plaga_cultivo").insert(relaciones).execute()
-            nueva_plaga["cultivos_afectados"] = cultivos_ids
-        except Exception:
-            pass  # tabla plaga_cultivo aún no existe
+        # Insertar relaciones many-to-many en plaga_cultivo
+        if cultivos_ids:
+            try:
+                relaciones = [{"plaga_id": nueva_plaga["id"], "cultivo_id": cid} for cid in cultivos_ids]
+                supabase.table("plaga_cultivo").insert(relaciones).execute()
+                nueva_plaga["cultivos_afectados"] = cultivos_ids
+            except Exception:
+                nueva_plaga["cultivos_afectados"] = []
 
-    return nueva_plaga
+        return nueva_plaga
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al crear plaga: {str(e)}")
 
 
 @router.get("/plagas/por-cultivo/{cultivo_id}", summary="Plagas asociadas a un cultivo")
@@ -171,8 +176,13 @@ def listar_cultivos():
 def crear_cultivo(cultivo: CultivoCreate):
     """Registra un nuevo cultivo en el catálogo."""
     supabase = get_supabase_client()
-    response = supabase.table("cultivos").insert(cultivo.model_dump()).execute()
-    return response.data[0]
+    try:
+        response = supabase.table("cultivos").insert(cultivo.model_dump()).execute()
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al crear cultivo: {str(e)}")
 
 
 @router.get("/cultivos/{cultivo_id}", summary="Obtener cultivo por ID")
