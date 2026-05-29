@@ -42,6 +42,7 @@ class InspeccionUpdate(BaseModel):
     observaciones: Optional[str] = None
     resultado_general: Optional[str] = None  # 'sin_novedad', 'con_hallazgos', 'critico'
     fecha_cierre: Optional[date] = None
+    razon_rechazo: Optional[str] = None
 
 
 class InspeccionResponse(BaseModel):
@@ -273,12 +274,15 @@ class AsignacionTecnico(BaseModel):
 def asignar_tecnico(inspeccion_id: str, asignacion: AsignacionTecnico):
     """
     Asigna o reasigna un técnico a una inspección existente.
-    Solo actualiza tecnico_id (campo real de la tabla).
+    Actualiza tecnico_id y cambia el estado a 'en_progreso' para marcarla como aprobada/asignada.
     """
     supabase = get_supabase_client()
     response = (
         supabase.table("inspecciones")
-        .update({"tecnico_id": asignacion.tecnico_id})
+        .update({
+            "tecnico_id": asignacion.tecnico_id,
+            "estado": "en_progreso"
+        })
         .eq("id", inspeccion_id)
         .execute()
     )
