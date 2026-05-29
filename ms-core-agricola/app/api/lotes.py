@@ -96,8 +96,13 @@ def crear_lote(lote: LoteCreate):
     if not predio.data:
         raise HTTPException(status_code=404, detail="Predio no encontrado")
         
-    # Verificar nombre duplicado en el mismo predio
+    # Verificar nombre duplicado en el mismo predio y que no esté vacío
     nombre_normalizado = lote.nombre.strip()
+    if not nombre_normalizado:
+        raise HTTPException(
+            status_code=400,
+            detail="El nombre del lote no puede estar vacío o contener solo espacios."
+        )
     lote_existente = (
         supabase.table("lotes")
         .select("id")
@@ -127,8 +132,13 @@ def actualizar_lote(lote_id: str, lote: LoteUpdate):
     predio_id = lote_actual_res.data[0]["predio_id"]
     
     # 2. Verificar que no exista otro lote en el mismo predio con el mismo nombre (si se cambia el nombre)
-    if lote.nombre:
+    if lote.nombre is not None:
         nombre_normalizado = lote.nombre.strip()
+        if not nombre_normalizado:
+            raise HTTPException(
+                status_code=400,
+                detail="El nombre del lote no puede estar vacío o contener solo espacios."
+            )
         lote_existente = (
             supabase.table("lotes")
             .select("id")
