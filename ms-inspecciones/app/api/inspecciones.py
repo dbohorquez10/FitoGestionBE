@@ -223,7 +223,7 @@ def crear_inspeccion(inspeccion: InspeccionCreate):
     data["fecha_inspeccion"] = str(data["fecha_inspeccion"])
 
     # Campos que no son columnas de la tabla inspecciones — excluirlos
-    campos_excluidos = {"tecnico_nombre", "modo_asignacion", "comentarios"}
+    campos_excluidos = {"tecnico_nombre", "comentarios"}
     data_limpia = {k: v for k, v in data.items() if k not in campos_excluidos and v is not None}
 
     # Si no se envió lote_id, intentar asignar el primer lote del predio
@@ -249,7 +249,7 @@ def actualizar_inspeccion(inspeccion_id: str, inspeccion: InspeccionUpdate):
     if "fecha_cierre" in data:
         data["fecha_cierre"] = str(data["fecha_cierre"])
     # Excluir campos que no son columnas de la tabla
-    campos_excluidos = {"tecnico_nombre", "modo_asignacion"}
+    campos_excluidos = {"tecnico_nombre"}
     data = {k: v for k, v in data.items() if k not in campos_excluidos}
     response = supabase.table("inspecciones").update(data).eq("id", inspeccion_id).execute()
     if not response.data:
