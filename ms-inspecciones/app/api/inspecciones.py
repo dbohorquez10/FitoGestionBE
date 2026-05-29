@@ -211,6 +211,11 @@ def crear_inspeccion(inspeccion: InspeccionCreate):
     Se inicializa con estado 'pendiente'.
     Filtra campos que no son columnas de la tabla antes de insertar.
     """
+    if inspeccion.fecha_inspeccion < date.today():
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha sugerida no puede ser anterior al día de hoy."
+        )
     supabase = get_supabase_client()
     data = inspeccion.model_dump()
     data["estado"] = "pendiente"
