@@ -649,10 +649,16 @@ def generar_informe_inspeccion_pdf(inspeccion_id: str):
     total_afectadas = 0
     findings = {}
     
-    # Get cultivo name of this inspection's lote
-    lote_id_ins = inspeccion.get("lote_id")
-    cultivo_id = lotes_cultivo_map.get(lote_id_ins) if lote_id_ins else None
-    cultivo_nombre = cultivos_map.get(cultivo_id, "N/A") if cultivo_id else "N/A"
+    # Get all cultivation types (cultivos) for this predio
+    cultivos_set = set()
+    if predio_id:
+        predio_lotes = supabase.table("lotes").select("cultivo_id").eq("predio_id", predio_id).execute()
+        if predio_lotes.data:
+            for l in predio_lotes.data:
+                c_id = l.get("cultivo_id")
+                if c_id and c_id in cultivos_map:
+                    cultivos_set.add(cultivos_map[c_id])
+    cultivo_nombre = ", ".join(sorted(list(cultivos_set))) if cultivos_set else "N/A"
     
     for s in sub_inspecciones:
         reg = s.get("registro_plantas") or []
@@ -752,7 +758,8 @@ def generar_informe_inspeccion_pdf(inspeccion_id: str):
         ]
         sorted_subs = sorted(sub_inspecciones, key=lambda x: x.get("codigo_punto") or "")
         for idx, s in enumerate(sorted_subs, 1):
-            lote_name = lotes_map.get(inspeccion.get("lote_id")) or "N/A"
+            lote_id_sub = s.get("lote_id") or s.get("codigo_punto") or s.get("loteId")
+            lote_name = lotes_map.get(lote_id_sub) or s.get("ubicacion_referencia") or "N/A"
             pt_label = get_punto_label(s, idx)
             s_obs = s.get("observaciones") or "Sin novedades particulares."
             points_data.append([
@@ -856,13 +863,12 @@ def generar_certificado_pdf(inspeccion_id: str):
         if tec_resp.data:
             tecnico = tec_resp.data[0]
 
-    # 5. Fetch Lote name
-    lote_name = "N/A"
-    lote_id = inspeccion.get("lote_id")
-    if lote_id:
-        lote_resp = supabase.table("lotes").select("nombre").eq("id", lote_id).execute()
-        if lote_resp.data:
-            lote_name = lote_resp.data[0].get("nombre", "N/A")
+    # 5. Fetch all Lotes of this predio
+    lotes_names = "Todos los lotes"
+    if predio_id:
+        lotes_resp = supabase.table("lotes").select("nombre").eq("predio_id", predio_id).execute()
+        if lotes_resp.data:
+            lotes_names = ", ".join([l.get("nombre") for l in lotes_resp.data if l.get("nombre")])
             
     # 6. Start PDF Doc
     buffer = BytesIO()
@@ -940,7 +946,7 @@ def generar_certificado_pdf(inspeccion_id: str):
          Paragraph("<b>Registro ICA:</b>", body_style), Paragraph(str(predio.get("numero_registro_ica") or "N/A"), body_bold)],
         [Paragraph("<b>Productor / Propietario:</b>", body_style), Paragraph(str(productor.get("nombre", "N/A")), body_style),
          Paragraph("<b>Departamento / Municipio:</b>", body_style), Paragraph(f"{predio.get('departamento', 'N/A')} - {predio.get('municipio', 'N/A')}", body_style)],
-        [Paragraph("<b>Lote Certificado:</b>", body_style), Paragraph(lote_name, body_bold),
+        [Paragraph("<b>Lotes Certificados:</b>", body_style), Paragraph(lotes_names, body_bold),
          Paragraph("<b>Vereda:</b>", body_style), Paragraph(str(predio.get("vereda") or "N/A"), body_style)],
         [Paragraph("<b>ID de Inspección:</b>", body_style), Paragraph(str(inspeccion.get("id")), body_style),
          Paragraph("<b>Fecha de Evaluación:</b>", body_style), Paragraph(str(inspeccion.get("fecha_inspeccion")), body_style)],
