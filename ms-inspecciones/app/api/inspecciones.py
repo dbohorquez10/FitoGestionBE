@@ -58,14 +58,86 @@ class InspeccionResponse(BaseModel):
     created_at: Optional[datetime] = None
 
 
+def post_process_inspecciones(inspecciones_list: list):
+    if not inspecciones_list:
+        return inspecciones_list
+        
+    supabase = get_supabase_client()
+    
+    # 1. Collect all tecnico_ids and predio_ids to fetch names in batch
+    tecnico_ids = list({ins["tecnico_id"] for ins in inspecciones_list if ins.get("tecnico_id")})
+    predio_ids = list({ins["predio_id"] for ins in inspecciones_list if ins.get("predio_id")})
+    
+    # Fetch technicians
+    tecnicos_map = {}
+    if tecnico_ids:
+        try:
+            tec_res = supabase.table("usuarios").select("id, nombre, apellido").in_("id", tecnico_ids).execute()
+            for u in tec_res.data:
+                tecnicos_map[u["id"]] = f"{u['nombre']} {u.get('apellido') or ''}".strip()
+        except Exception as e:
+            print("Error fetching tecnicos in batch:", e)
+            
+    # Fetch predios and their producers
+    productores_map = {}
+    if predio_ids:
+        try:
+            pred_res = supabase.table("predios").select("id, productor_id").in_("id", predio_ids).execute()
+            pred_prod_map = {p["id"]: p["productor_id"] for p in pred_res.data}
+            productor_ids = list({p["productor_id"] for p in pred_res.data if p.get("productor_id")})
+            
+            if productor_ids:
+                prod_res = supabase.table("usuarios").select("id, nombre, apellido").in_("id", productor_ids).execute()
+                prod_user_map = {u["id"]: f"{u['nombre']} {u.get('apellido') or ''}".strip() for u in prod_res.data}
+                
+                for pred_id, prod_id in pred_prod_map.items():
+                    if prod_id in prod_user_map:
+                        productores_map[pred_id] = prod_user_map[prod_id]
+        except Exception as e:
+            print("Error fetching predios/producers in batch:", e)
+            
+    # 2. Process each inspection
+    for ins in inspecciones_list:
+        tec_id = ins.get("tecnico_id")
+        pred_id = ins.get("predio_id")
+        
+        # Inject technician/producer names
+        ins["nombre_tecnico"] = tecnicos_map.get(tec_id) or ins.get("tecnico_nombre") or "No Asignado"
+        ins["tecnico_nombre"] = ins["nombre_tecnico"] # Compatibility alias
+        ins["nombre_productor"] = productores_map.get(pred_id) or "Desconocido"
+        
+        # Calculate aggregates
+        subs = ins.get("sub_inspecciones") or []
+        lote_ids = set()
+        total_evaluadas = 0
+        total_enfermas = 0
+        
+        for s in subs:
+            lid = s.get("lote_id") or s.get("codigo_punto") or s.get("loteId")
+            if lid:
+                lote_ids.add(lid)
+            # If sub_inspeccion doesn't have plants_evaluadas, use length of registro_plantas
+            regs = s.get("registro_plantas") or []
+            total_evaluadas += len(regs)
+            for r in regs:
+                if r.get("estado_planta") in ["enferma", "muerta"] or r.get("plaga_id"):
+                    total_enfermas += 1
+                    
+        ins["lotes_count"] = len(lote_ids)
+        ins["plantas_evaluadas"] = total_evaluadas
+        ins["plantas_enfermas"] = total_enfermas
+        
+    return inspecciones_list
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/", summary="Listar inspecciones")
 def listar_inspecciones(skip: int = 0, limit: int = 100):
     """Retorna todas las inspecciones registradas."""
     supabase = get_supabase_client()
-    response = supabase.table("inspecciones").select("*").order("fecha_inspeccion", desc=True).range(skip, skip + limit - 1).execute()
-    return response.data
+    response = supabase.table("inspecciones").select("*, sub_inspecciones(*, registro_plantas(*))").order("fecha_inspeccion", desc=True).range(skip, skip + limit - 1).execute()
+    return post_process_inspecciones(response.data)
 
 
 # ── Rutas estáticas ANTES de las dinámicas (evitar conflicto con /{inspeccion_id}) ──
@@ -100,7 +172,8 @@ def obtener_inspeccion(inspeccion_id: str):
     )
     if not response.data:
         raise HTTPException(status_code=404, detail="Inspección no encontrada")
-    return response.data[0]
+    processed = post_process_inspecciones(response.data)
+    return processed[0]
 
 
 @router.get("/tecnico/{tecnico_id}", summary="Inspecciones por técnico")
@@ -109,12 +182,12 @@ def listar_inspecciones_por_tecnico(tecnico_id: str):
     supabase = get_supabase_client()
     response = (
         supabase.table("inspecciones")
-        .select("*")
+        .select("*, sub_inspecciones(*, registro_plantas(*))")
         .eq("tecnico_id", tecnico_id)
         .order("fecha_inspeccion", desc=True)
         .execute()
     )
-    return response.data
+    return post_process_inspecciones(response.data)
 
 
 @router.get("/predio/{predio_id}", summary="Inspecciones por predio")
@@ -123,12 +196,12 @@ def listar_inspecciones_por_predio(predio_id: str):
     supabase = get_supabase_client()
     response = (
         supabase.table("inspecciones")
-        .select("*")
+        .select("*, sub_inspecciones(*, registro_plantas(*))")
         .eq("predio_id", predio_id)
         .order("fecha_inspeccion", desc=True)
         .execute()
     )
-    return response.data
+    return post_process_inspecciones(response.data)
 
 
 @router.post("/", status_code=201, summary="Crear una inspección")
