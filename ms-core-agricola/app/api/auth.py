@@ -114,16 +114,40 @@ def register(data: RegisterRequest, authorization: Optional[str] = Header(None))
 
     try:
         data.email = data.email.lower()
-        # 1. Crear en Supabase Auth (requiere service_role key)
-        admin_client = get_supabase_admin_client()
-        auth_response = admin_client.auth.admin.create_user(
-            {
-                "email": data.email,
-                "password": data.password,
-                "email_confirm": True,
-            }
+        
+        # Verificar si contamos con la llave service_role para usar el cliente administrador
+        from app.core.config import get_settings
+        settings = get_settings()
+        has_service_role = bool(
+            settings.SUPABASE_SERVICE_ROLE_KEY and 
+            settings.SUPABASE_SERVICE_ROLE_KEY != settings.SUPABASE_KEY
         )
-        user_id = auth_response.user.id
+
+        if has_service_role:
+            # 1. Crear en Supabase Auth usando el cliente administrador (auto-confirma el correo)
+            admin_client = get_supabase_admin_client()
+            auth_response = admin_client.auth.admin.create_user(
+                {
+                    "email": data.email,
+                    "password": data.password,
+                    "email_confirm": True,
+                }
+            )
+            user_id = auth_response.user.id
+        else:
+            # 1. Fallback: Registrar mediante el endpoint público de signup (usa anon key)
+            auth_response = supabase.auth.sign_up(
+                {
+                    "email": data.email,
+                    "password": data.password,
+                }
+            )
+            if not auth_response or not auth_response.user:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Error al registrar usuario: No se pudo crear el usuario en el servicio de autenticación."
+                )
+            user_id = auth_response.user.id
 
         # 2. Insertar perfil en tabla usuarios
         perfil = {
