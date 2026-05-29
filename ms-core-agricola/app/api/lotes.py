@@ -95,6 +95,22 @@ def crear_lote(lote: LoteCreate):
     predio = supabase.table("predios").select("id").eq("id", lote.predio_id).execute()
     if not predio.data:
         raise HTTPException(status_code=404, detail="Predio no encontrado")
+        
+    # Verificar nombre duplicado en el mismo predio
+    nombre_normalizado = lote.nombre.strip()
+    lote_existente = (
+        supabase.table("lotes")
+        .select("id")
+        .eq("predio_id", lote.predio_id)
+        .ilike("nombre", nombre_normalizado)
+        .execute()
+    )
+    if lote_existente.data:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ya existe un lote con el nombre '{nombre_normalizado}' en este lugar de producción."
+        )
+        
     response = supabase.table("lotes").insert(lote.model_dump()).execute()
     return response.data[0]
 
@@ -103,6 +119,30 @@ def crear_lote(lote: LoteCreate):
 def actualizar_lote(lote_id: str, lote: LoteUpdate):
     """Actualiza los datos de un lote existente."""
     supabase = get_supabase_client()
+    
+    # 1. Obtener el lote para conocer su predio_id
+    lote_actual_res = supabase.table("lotes").select("predio_id").eq("id", lote_id).execute()
+    if not lote_actual_res.data:
+        raise HTTPException(status_code=404, detail="Lote no encontrado")
+    predio_id = lote_actual_res.data[0]["predio_id"]
+    
+    # 2. Verificar que no exista otro lote en el mismo predio con el mismo nombre (si se cambia el nombre)
+    if lote.nombre:
+        nombre_normalizado = lote.nombre.strip()
+        lote_existente = (
+            supabase.table("lotes")
+            .select("id")
+            .eq("predio_id", predio_id)
+            .ilike("nombre", nombre_normalizado)
+            .neq("id", lote_id)
+            .execute()
+        )
+        if lote_existente.data:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ya existe un lote con el nombre '{nombre_normalizado}' en este lugar de producción."
+            )
+            
     data = {k: v for k, v in lote.model_dump().items() if v is not None}
     response = supabase.table("lotes").update(data).eq("id", lote_id).execute()
     if not response.data:
