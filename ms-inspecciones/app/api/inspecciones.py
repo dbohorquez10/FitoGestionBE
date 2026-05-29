@@ -158,7 +158,7 @@ def listar_inspecciones_pendientes():
         .order("fecha_inspeccion")
         .execute()
     )
-    return response.data
+    return post_process_inspecciones(response.data)
 
 
 @router.get("/{inspeccion_id}", summary="Obtener una inspección por ID")
@@ -205,6 +205,29 @@ def listar_inspecciones_por_predio(predio_id: str):
     return post_process_inspecciones(response.data)
 
 
+def check_tecnico_conflict(tecnico_id: str, fecha_inspeccion: str, excluir_inspeccion_id: Optional[str] = None):
+    """Consulta si el técnico ya tiene una inspección con estado pendiente/en_progreso para la misma fecha."""
+    if not tecnico_id:
+        return
+    supabase = get_supabase_client()
+    query = (
+        supabase.table("inspecciones")
+        .select("id")
+        .eq("tecnico_id", tecnico_id)
+        .eq("fecha_inspeccion", str(fecha_inspeccion))
+        .in_("estado", ["pendiente", "en_progreso"])
+    )
+    if excluir_inspeccion_id:
+        query = query.neq("id", excluir_inspeccion_id)
+    
+    conflict = query.execute()
+    if conflict.data:
+        raise HTTPException(
+            status_code=400,
+            detail="El técnico ya tiene una inspección asignada para esta fecha."
+        )
+
+
 @router.post("/", status_code=201, summary="Crear una inspección")
 def crear_inspeccion(inspeccion: InspeccionCreate):
     """
@@ -217,6 +240,11 @@ def crear_inspeccion(inspeccion: InspeccionCreate):
             status_code=400,
             detail="La fecha sugerida no puede ser anterior al día de hoy."
         )
+    
+    # Verificar conflicto de agenda si se asigna técnico de preferencia
+    if inspeccion.tecnico_id:
+        check_tecnico_conflict(inspeccion.tecnico_id, str(inspeccion.fecha_inspeccion))
+
     supabase = get_supabase_client()
     data = inspeccion.model_dump()
     data["estado"] = "pendiente"
@@ -248,6 +276,18 @@ def actualizar_inspeccion(inspeccion_id: str, inspeccion: InspeccionUpdate):
     data = {k: v for k, v in inspeccion.model_dump().items() if v is not None}
     if "fecha_cierre" in data:
         data["fecha_cierre"] = str(data["fecha_cierre"])
+    
+    # 1. Obtener la inspección actual para conocer su fecha
+    inspeccion_actual = supabase.table("inspecciones").select("tecnico_id", "fecha_inspeccion", "estado").eq("id", inspeccion_id).execute()
+    if not inspeccion_actual.data:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+    
+    fecha_ins = inspeccion_actual.data[0]["fecha_inspeccion"]
+    
+    # 2. Si se está cambiando el técnico, verificar conflicto de agenda
+    if "tecnico_id" in data and data["tecnico_id"] is not None:
+        check_tecnico_conflict(data["tecnico_id"], fecha_ins, excluir_inspeccion_id=inspeccion_id)
+
     # Excluir campos que no son columnas de la tabla
     campos_excluidos = {"tecnico_nombre"}
     data = {k: v for k, v in data.items() if k not in campos_excluidos}
@@ -277,6 +317,17 @@ def asignar_tecnico(inspeccion_id: str, asignacion: AsignacionTecnico):
     Actualiza tecnico_id y cambia el estado a 'en_progreso' para marcarla como aprobada/asignada.
     """
     supabase = get_supabase_client()
+    
+    # 1. Obtener la fecha de la inspección actual
+    inspeccion_actual = supabase.table("inspecciones").select("fecha_inspeccion").eq("id", inspeccion_id).execute()
+    if not inspeccion_actual.data:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+    
+    fecha_ins = inspeccion_actual.data[0]["fecha_inspeccion"]
+    
+    # 2. Verificar conflicto de agenda
+    check_tecnico_conflict(asignacion.tecnico_id, fecha_ins, excluir_inspeccion_id=inspeccion_id)
+
     response = (
         supabase.table("inspecciones")
         .update({

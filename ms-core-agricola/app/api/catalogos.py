@@ -19,7 +19,19 @@ class PlagaCreate(BaseModel):
     descripcion: Optional[str] = None
     icon: Optional[str] = None
     color: Optional[str] = None
+    estado: Optional[str] = "aprobado"  # 'aprobado', 'pendiente'
     cultivos_afectados: Optional[List[str]] = []  # Lista de IDs de cultivos (se insertan en plaga_cultivo)
+
+
+class PlagaSugerir(BaseModel):
+    """Esquema para sugerir una plaga desde una inspección."""
+    nombre_comun: str
+    nombre_cientifico: Optional[str] = None
+    tipo: str = "insecto"
+    descripcion: Optional[str] = None
+    cultivo_id: str
+    icon: Optional[str] = "bug_report"
+    color: Optional[str] = "#ef4444"
 
 
 class CultivoCreate(BaseModel):
@@ -81,6 +93,43 @@ def crear_plaga(plaga: PlagaCreate):
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error al crear plaga: {str(e)}")
+
+
+@router.post("/plagas/sugerir", status_code=201, summary="Sugerir una nueva plaga (Técnico)")
+def sugerir_plaga(plaga: PlagaSugerir):
+    """Sugiere una nueva plaga con estado 'pendiente' y la asocia al cultivo del lote."""
+    supabase = get_supabase_client()
+    try:
+        plaga_data = {
+            "nombre_comun": plaga.nombre_comun,
+            "nombre_cientifico": plaga.nombre_cientifico,
+            "tipo": plaga.tipo,
+            "descripcion": plaga.descripcion,
+            "icon": plaga.icon,
+            "color": plaga.color,
+            "estado": "pendiente"
+        }
+        response = supabase.table("plagas").insert(plaga_data).execute()
+        nueva_plaga = response.data[0]
+
+        # Relacionar en plaga_cultivo
+        relacion = {"plaga_id": nueva_plaga["id"], "cultivo_id": plaga.cultivo_id}
+        supabase.table("plaga_cultivo").insert(relacion).execute()
+        nueva_plaga["cultivos_afectados"] = [plaga.cultivo_id]
+
+        return nueva_plaga
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al sugerir plaga: {str(e)}")
+
+
+@router.patch("/plagas/{plaga_id}/aprobar", summary="Aprobar una plaga sugerida")
+def aprobar_plaga(plaga_id: str):
+    """Aprueba una plaga pasando su estado a 'aprobado'."""
+    supabase = get_supabase_client()
+    response = supabase.table("plagas").update({"estado": "aprobado"}).eq("id", plaga_id).execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Plaga no encontrada")
+    return response.data[0]
 
 
 @router.get("/plagas/por-cultivo/{cultivo_id}", summary="Plagas asociadas a un cultivo")
