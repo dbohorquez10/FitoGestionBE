@@ -2,10 +2,11 @@
 Router de Catálogos.
 Gestión de Plagas y Cultivos registrados ante el ICA.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 from app.core.supabase_client import get_supabase_client
+from app.core.security import require_role
 
 router = APIRouter()
 
@@ -66,7 +67,8 @@ def listar_plagas():
 
 
 @router.post("/plagas", status_code=201, summary="Crear una plaga")
-def crear_plaga(plaga: PlagaCreate):
+def crear_plaga(plaga: PlagaCreate,
+               current_user: dict = Depends(require_role(['admin']))):
     """
     Registra una nueva plaga en el catálogo.
     Si se proporcionan cultivos_afectados, se insertan en la tabla plaga_cultivo.
@@ -96,7 +98,8 @@ def crear_plaga(plaga: PlagaCreate):
 
 
 @router.post("/plagas/sugerir", status_code=201, summary="Sugerir una nueva plaga (Técnico)")
-def sugerir_plaga(plaga: PlagaSugerir):
+def sugerir_plaga(plaga: PlagaSugerir,
+                 current_user: dict = Depends(require_role(['tecnico']))):
     """Sugiere una nueva plaga con estado 'pendiente' y la asocia al cultivo del lote."""
     supabase = get_supabase_client()
     try:
@@ -121,7 +124,8 @@ def sugerir_plaga(plaga: PlagaSugerir):
 
 
 @router.patch("/plagas/{plaga_id}/aprobar", summary="Aprobar una plaga sugerida")
-def aprobar_plaga(plaga_id: str):
+def aprobar_plaga(plaga_id: str,
+                 current_user: dict = Depends(require_role(['admin']))):
     """Aprueba una plaga pasando su estado a 'aprobado'."""
     supabase = get_supabase_client()
     response = supabase.table("plagas").update({"estado": "aprobado"}).eq("id", plaga_id).execute()
@@ -175,7 +179,8 @@ def obtener_plaga(plaga_id: str):
 
 
 @router.put("/plagas/{plaga_id}", summary="Actualizar plaga")
-def actualizar_plaga(plaga_id: str, plaga: PlagaCreate):
+def actualizar_plaga(plaga_id: str, plaga: PlagaCreate,
+                    current_user: dict = Depends(require_role(['admin']))):
     """
     Actualiza una plaga existente.
     Si se proporcionan cultivos_afectados, se reemplazan las relaciones en plaga_cultivo.
@@ -202,7 +207,8 @@ def actualizar_plaga(plaga_id: str, plaga: PlagaCreate):
 
 
 @router.delete("/plagas/{plaga_id}", status_code=204, summary="Eliminar plaga")
-def eliminar_plaga(plaga_id: str):
+def eliminar_plaga(plaga_id: str,
+                  current_user: dict = Depends(require_role(['admin']))):
     """Elimina una plaga del catálogo."""
     supabase = get_supabase_client()
     supabase.table("plagas").delete().eq("id", plaga_id).execute()
@@ -220,7 +226,8 @@ def listar_cultivos():
 
 
 @router.post("/cultivos", status_code=201, summary="Crear un cultivo")
-def crear_cultivo(cultivo: CultivoCreate):
+def crear_cultivo(cultivo: CultivoCreate,
+                 current_user: dict = Depends(require_role(['admin']))):
     """Registra un nuevo cultivo en el catálogo."""
     supabase = get_supabase_client()
     try:
@@ -243,7 +250,8 @@ def obtener_cultivo(cultivo_id: str):
 
 
 @router.put("/cultivos/{cultivo_id}", summary="Actualizar cultivo")
-def actualizar_cultivo(cultivo_id: str, cultivo: CultivoCreate):
+def actualizar_cultivo(cultivo_id: str, cultivo: CultivoCreate,
+                      current_user: dict = Depends(require_role(['admin']))):
     """Actualiza un cultivo existente."""
     supabase = get_supabase_client()
     response = supabase.table("cultivos").update(cultivo.model_dump()).eq("id", cultivo_id).execute()
@@ -253,7 +261,8 @@ def actualizar_cultivo(cultivo_id: str, cultivo: CultivoCreate):
 
 
 @router.delete("/cultivos/{cultivo_id}", status_code=204, summary="Eliminar cultivo")
-def eliminar_cultivo(cultivo_id: str):
+def eliminar_cultivo(cultivo_id: str,
+                    current_user: dict = Depends(require_role(['admin']))):
     """Elimina un cultivo del catálogo."""
     supabase = get_supabase_client()
     supabase.table("cultivos").delete().eq("id", cultivo_id).execute()

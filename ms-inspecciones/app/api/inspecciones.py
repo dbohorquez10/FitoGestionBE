@@ -2,12 +2,13 @@
 Router de Inspecciones.
 Flujo transaccional completo para inspecciones fitosanitarias ICA.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime
 from app.core.supabase_client import get_supabase_client
+from app.core.security import get_current_user, require_role
 from io import BytesIO
 
 # ReportLab imports
@@ -49,9 +50,9 @@ class InspeccionUpdate(BaseModel):
 class InspeccionResponse(BaseModel):
     """Esquema de respuesta de una inspección."""
     id: str
-    tecnico_id: str
+    tecnico_id: Optional[str] = None
     predio_id: str
-    lote_id: str
+    lote_id: Optional[str] = None
     fecha_inspeccion: date
     tipo_inspeccion: str
     estado: str
@@ -135,17 +136,18 @@ def post_process_inspecciones(inspecciones_list: list):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/", summary="Listar inspecciones")
-def listar_inspecciones(skip: int = 0, limit: int = 100):
+def listar_inspecciones(skip: int = 0, limit: int = 100,
+                        current_user: dict = Depends(get_current_user)):
     """Retorna todas las inspecciones registradas."""
     supabase = get_supabase_client()
-    response = supabase.table("inspecciones").select("*, sub_inspecciones(*, registro_plantas(*))").order("fecha_inspeccion", desc=True).range(skip, skip + limit - 1).execute()
+    response = supabase.table("inspecciones").select("*").order("fecha_inspeccion", desc=True).range(skip, skip + limit - 1).execute()
     return post_process_inspecciones(response.data)
 
 
 # ── Rutas estáticas ANTES de las dinámicas (evitar conflicto con /{inspeccion_id}) ──
 
 @router.get("/estado/pendientes", summary="Listar inspecciones pendientes")
-def listar_inspecciones_pendientes():
+def listar_inspecciones_pendientes(current_user: dict = Depends(require_role(['admin']))):
     """
     Retorna todas las inspecciones con estado 'pendiente'.
     Equivale a getInspeccionesPendientes() del frontend.
@@ -163,7 +165,8 @@ def listar_inspecciones_pendientes():
 
 
 @router.get("/{inspeccion_id}", summary="Obtener una inspección por ID")
-def obtener_inspeccion(inspeccion_id: str):
+def obtener_inspeccion(inspeccion_id: str,
+                       current_user: dict = Depends(get_current_user)):
     """Retorna una inspección con sus sub-inspecciones y registros de plantas."""
     supabase = get_supabase_client()
     response = (
@@ -179,7 +182,8 @@ def obtener_inspeccion(inspeccion_id: str):
 
 
 @router.get("/tecnico/{tecnico_id}", summary="Inspecciones por técnico")
-def listar_inspecciones_por_tecnico(tecnico_id: str):
+def listar_inspecciones_por_tecnico(tecnico_id: str,
+                                    current_user: dict = Depends(require_role(['tecnico', 'admin']))):
     """Retorna todas las inspecciones asignadas a un técnico."""
     supabase = get_supabase_client()
     response = (
@@ -193,7 +197,8 @@ def listar_inspecciones_por_tecnico(tecnico_id: str):
 
 
 @router.get("/predio/{predio_id}", summary="Inspecciones por predio")
-def listar_inspecciones_por_predio(predio_id: str):
+def listar_inspecciones_por_predio(predio_id: str,
+                                   current_user: dict = Depends(get_current_user)):
     """Retorna todas las inspecciones realizadas en un predio."""
     supabase = get_supabase_client()
     response = (
@@ -230,7 +235,8 @@ def check_tecnico_conflict(tecnico_id: str, fecha_inspeccion: str, excluir_inspe
 
 
 @router.post("/", status_code=201, summary="Crear una inspección")
-def crear_inspeccion(inspeccion: InspeccionCreate):
+def crear_inspeccion(inspeccion: InspeccionCreate,
+                     current_user: dict = Depends(require_role(['productor', 'admin']))):
     """
     Crea una nueva inspección fitosanitaria.
     Se inicializa con estado 'pendiente'.
@@ -271,7 +277,8 @@ def crear_inspeccion(inspeccion: InspeccionCreate):
 
 
 @router.put("/{inspeccion_id}", summary="Actualizar una inspección")
-def actualizar_inspeccion(inspeccion_id: str, inspeccion: InspeccionUpdate):
+def actualizar_inspeccion(inspeccion_id: str, inspeccion: InspeccionUpdate,
+                          current_user: dict = Depends(require_role(['admin', 'tecnico']))):
     """Actualiza el estado o datos de una inspección existente."""
     supabase = get_supabase_client()
     data = {k: v for k, v in inspeccion.model_dump().items() if v is not None}
@@ -299,7 +306,8 @@ def actualizar_inspeccion(inspeccion_id: str, inspeccion: InspeccionUpdate):
 
 
 @router.delete("/{inspeccion_id}", status_code=204, summary="Eliminar una inspección")
-def eliminar_inspeccion(inspeccion_id: str):
+def eliminar_inspeccion(inspeccion_id: str,
+                        current_user: dict = Depends(require_role(['admin']))):
     """Elimina una inspección y sus registros asociados (cascade)."""
     supabase = get_supabase_client()
     supabase.table("inspecciones").delete().eq("id", inspeccion_id).execute()
@@ -312,7 +320,8 @@ class AsignacionTecnico(BaseModel):
 
 
 @router.patch("/{inspeccion_id}/asignar-tecnico", summary="Asignar técnico a una inspección")
-def asignar_tecnico(inspeccion_id: str, asignacion: AsignacionTecnico):
+def asignar_tecnico(inspeccion_id: str, asignacion: AsignacionTecnico,
+                    current_user: dict = Depends(require_role(['admin']))):
     """
     Asigna o reasigna un técnico a una inspección existente.
     Actualiza tecnico_id y cambia el estado a 'en_progreso' para marcarla como aprobada/asignada.
@@ -398,7 +407,8 @@ def draw_header_footer(canvas, doc):
 
 
 @router.patch("/{inspeccion_id}/finalizar", summary="Finalizar una inspección completa")
-def finalizar_inspeccion(inspeccion_id: str, observaciones: Optional[str] = None):
+def finalizar_inspeccion(inspeccion_id: str, observaciones: Optional[str] = None,
+                         current_user: dict = Depends(require_role(['tecnico', 'admin']))):
     """
     Marca la inspección como 'completada', calcula el estado de aprobación automáticamente
     en base al umbral de incidencia, y opcionalmente guarda observaciones.
@@ -467,7 +477,8 @@ def finalizar_inspeccion(inspeccion_id: str, observaciones: Optional[str] = None
 
 
 @router.patch("/{inspeccion_id}/aprobacion", summary="Evaluar aprobación de una inspección (Admin)")
-def evaluar_aprobacion(inspeccion_id: str, evaluacion: EvaluacionAprobacion):
+def evaluar_aprobacion(inspeccion_id: str, evaluacion: EvaluacionAprobacion,
+                       current_user: dict = Depends(require_role(['admin']))):
     """
     Permite al administrador aprobar o rechazar una inspección fitosanitaria.
     """
@@ -532,7 +543,8 @@ class EstadoInspeccionUpdate(BaseModel):
 
 
 @router.patch("/{inspeccion_id}/estado", summary="Actualizar estado de inspección (Aprobación/Rechazo)")
-def actualizar_estado_inspeccion(inspeccion_id: str, payload: EstadoInspeccionUpdate):
+def actualizar_estado_inspeccion(inspeccion_id: str, payload: EstadoInspeccionUpdate,
+                                 current_user: dict = Depends(require_role(['admin']))):
     """
     Actualiza el estado de una inspección.
     Si el estado es 'rechazada', exige y guarda 'motivo_rechazo'.
@@ -568,7 +580,8 @@ def actualizar_estado_inspeccion(inspeccion_id: str, payload: EstadoInspeccionUp
 
 
 @router.get("/{inspeccion_id}/informe", summary="Generar Informe Fitosanitario")
-def generar_informe_inspeccion(inspeccion_id: str):
+def generar_informe_inspeccion(inspeccion_id: str,
+                               current_user: dict = Depends(get_current_user)):
     """
     Genera un informe consolidado de la inspección llamando a un Stored Procedure en Supabase.
     """
@@ -581,7 +594,8 @@ def generar_informe_inspeccion(inspeccion_id: str):
 
 
 @router.get("/{inspeccion_id}/informe/pdf", summary="Generar Informe Fitosanitario en PDF")
-def generar_informe_inspeccion_pdf(inspeccion_id: str):
+def generar_informe_inspeccion_pdf(inspeccion_id: str,
+                                   current_user: dict = Depends(get_current_user)):
     """
     Genera un informe fitosanitario detallado en formato PDF para descarga directa.
     """
@@ -922,7 +936,8 @@ def generar_informe_inspeccion_pdf(inspeccion_id: str):
 
 
 @router.get("/{inspeccion_id}/certificado/pdf", summary="Generar Certificado Fitosanitario en PDF")
-def generar_certificado_pdf(inspeccion_id: str):
+def generar_certificado_pdf(inspeccion_id: str,
+                            current_user: dict = Depends(get_current_user)):
     """
     Genera un Certificado de Conformidad Fitosanitaria oficial en formato PDF.
     Validará estrictamente que estado_aprobacion == 'aprobado'.

@@ -123,6 +123,39 @@ def actualizar_usuario(usuario_id: str, usuario: UsuarioUpdate, current_user: di
 def eliminar_usuario(usuario_id: str, current_user: dict = Depends(require_role(['admin']))):
     """Elimina un usuario del sistema por su ID. Solo Administradores."""
     supabase = get_supabase_client()
+    
+    # 1. Obtener el rol del usuario a eliminar
+    user_res = supabase.table("usuarios").select("rol").eq("id", usuario_id).execute()
+    if not user_res.data:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+    rol = user_res.data[0].get("rol")
+    
+    # 2. Validaciones según el rol
+    if rol == "productor":
+        # Verificar si tiene predios asociados
+        predios_res = supabase.table("predios").select("id").eq("productor_id", usuario_id).execute()
+        if predios_res.data:
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede eliminar el usuario productor porque tiene predios asignados. Reasigne los predios antes de eliminar."
+            )
+    elif rol == "tecnico":
+        # Verificar si tiene inspecciones en estado 'pendiente' o 'en_progreso'
+        inspecciones_res = (
+            supabase.table("inspecciones")
+            .select("id")
+            .eq("tecnico_id", usuario_id)
+            .in_("estado", ["pendiente", "en_progreso"])
+            .execute()
+        )
+        if inspecciones_res.data:
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede eliminar el usuario técnico porque tiene inspecciones pendientes o en progreso."
+            )
+            
+    # 3. Proceder a la eliminación
     supabase.table("usuarios").delete().eq("id", usuario_id).execute()
     return None
 

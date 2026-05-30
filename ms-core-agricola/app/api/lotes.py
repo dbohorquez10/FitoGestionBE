@@ -3,10 +3,11 @@ Router de Lotes.
 Gestión de lotes dentro de un predio agrícola.
 Incluye filtrado por productor para garantizar aislamiento de datos.
 """
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel, Field
 from typing import Optional
 from app.core.supabase_client import get_supabase_client
+from app.core.security import get_current_user, require_role
 
 router = APIRouter()
 
@@ -17,8 +18,8 @@ class LoteCreate(BaseModel):
     predio_id: str
     nombre: str
     cultivo_id: Optional[str] = None
-    area: Optional[float] = None  # Hectáreas
-    num_plantas: Optional[int] = None  # Total absoluto de plantas
+    area: Optional[float] = Field(None, gt=0.0)  # Hectáreas
+    num_plantas: Optional[int] = Field(None, gt=0)  # Total absoluto de plantas
     estado: str = "Óptimo"  # 'Óptimo', 'Alerta', 'Crítico', 'En Cuarentena'
 
 
@@ -34,7 +35,8 @@ class LoteUpdate(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/", summary="Listar lotes")
-def listar_lotes(predio_id: Optional[str] = None):
+def listar_lotes(predio_id: Optional[str] = None,
+                 current_user: dict = Depends(get_current_user)):
     """
     Retorna lotes. Si se pasa predio_id como query param, filtra solo los
     de ese predio. Sin filtro retorna todos (uso admin).
@@ -48,7 +50,8 @@ def listar_lotes(predio_id: Optional[str] = None):
 
 
 @router.get("/{lote_id}", summary="Obtener un lote por ID")
-def obtener_lote(lote_id: str):
+def obtener_lote(lote_id: str,
+                 current_user: dict = Depends(get_current_user)):
     """Retorna un lote específico por su ID."""
     supabase = get_supabase_client()
     response = supabase.table("lotes").select("*, cultivos(nombre), predios(nombre)").eq("id", lote_id).execute()
@@ -58,7 +61,8 @@ def obtener_lote(lote_id: str):
 
 
 @router.get("/predio/{predio_id}", summary="Listar lotes de un predio")
-def listar_lotes_por_predio(predio_id: str):
+def listar_lotes_por_predio(predio_id: str,
+                            current_user: dict = Depends(get_current_user)):
     """Retorna todos los lotes de un predio específico."""
     supabase = get_supabase_client()
     response = supabase.table("lotes").select("*, cultivos(nombre)").eq("predio_id", predio_id).execute()
@@ -66,12 +70,16 @@ def listar_lotes_por_predio(predio_id: str):
 
 
 @router.get("/productor/{productor_id}", summary="Listar lotes de un productor")
-def listar_lotes_por_productor(productor_id: str):
+def listar_lotes_por_productor(productor_id: str,
+                               current_user: dict = Depends(get_current_user)):
     """
     Retorna todos los lotes de todos los predios de un productor.
-    Realiza join: lotes → predios (filtrado por productor_id).
+    El productor autenticado solo puede ver los suyos.
     """
     supabase = get_supabase_client()
+    # Un productor no puede ver los lotes de otro productor
+    if current_user.get("rol") == "productor" and current_user["id"] != productor_id:
+        raise HTTPException(status_code=403, detail="No puedes ver los lotes de otro productor")
     # 1. Obtener los predios del productor
     predios_res = supabase.table("predios").select("id").eq("productor_id", productor_id).execute()
     predio_ids = [p["id"] for p in predios_res.data]
@@ -88,7 +96,8 @@ def listar_lotes_por_productor(productor_id: str):
 
 
 @router.post("/", status_code=201, summary="Crear un lote")
-def crear_lote(lote: LoteCreate):
+def crear_lote(lote: LoteCreate,
+               current_user: dict = Depends(require_role(['productor', 'admin']))):
     """Registra un nuevo lote dentro de un predio."""
     supabase = get_supabase_client()
     # Verificar que el predio exista
@@ -121,7 +130,8 @@ def crear_lote(lote: LoteCreate):
 
 
 @router.put("/{lote_id}", summary="Actualizar un lote")
-def actualizar_lote(lote_id: str, lote: LoteUpdate):
+def actualizar_lote(lote_id: str, lote: LoteUpdate,
+                   current_user: dict = Depends(require_role(['productor', 'admin']))):
     """Actualiza los datos de un lote existente."""
     supabase = get_supabase_client()
     
@@ -161,7 +171,8 @@ def actualizar_lote(lote_id: str, lote: LoteUpdate):
 
 
 @router.delete("/{lote_id}", status_code=204, summary="Eliminar un lote")
-def eliminar_lote(lote_id: str):
+def eliminar_lote(lote_id: str,
+                 current_user: dict = Depends(require_role(['admin']))):
     """Elimina un lote del sistema."""
     supabase = get_supabase_client()
     supabase.table("lotes").delete().eq("id", lote_id).execute()

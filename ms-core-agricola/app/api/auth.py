@@ -173,13 +173,22 @@ def register(data: RegisterRequest, authorization: Optional[str] = Header(None))
 
 
 @router.post("/logout", status_code=204, summary="Cerrar sesión")
-def logout():
+def logout(authorization: Optional[str] = Header(None)):
     """
-    Invalida la sesión actual del usuario.
-    El cliente debe eliminar el token localmente.
+    Invalida el JWT real del usuario autenticado en Supabase.
+    Requiere el header Authorization: Bearer <token>.
+    El cliente también debe eliminar el token localmente.
     """
-    supabase = get_supabase_client()
-    supabase.auth.sign_out()
+    if authorization:
+        try:
+            token = authorization.replace("Bearer ", "").strip()
+            if token:
+                # Usar el cliente admin para revocar el token específico del usuario
+                admin_client = get_supabase_admin_client()
+                admin_client.auth.admin.sign_out(token)
+        except Exception:
+            # Fallar silenciosamente: el cliente ya habrá limpiado su localStorage
+            pass
     return None
 
 

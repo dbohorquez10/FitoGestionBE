@@ -2,10 +2,11 @@
 Router de Registro de Plantas.
 Registro individual de plantas inspeccionadas con hallazgos fitosanitarios.
 """
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from app.core.supabase_client import get_supabase_client
+from app.core.security import get_current_user, require_role
 
 router = APIRouter()
 
@@ -17,9 +18,9 @@ class RegistroPlantaCreate(BaseModel):
     numero_planta: int
     plaga_id: Optional[str] = None
     sintoma: Optional[str] = None
-    severidad: Optional[str] = None  # 'leve', 'moderado', 'severo'
-    incidencia: Optional[float] = None  # Porcentaje 0-100
-    estado_planta: str = "sana"  # 'sana', 'enferma', 'muerta'
+    severidad: Optional[str] = Field(None, pattern="^(leve|moderado|severo)$")  # 'leve', 'moderado', 'severo'
+    incidencia: Optional[float] = Field(None, ge=0.0, le=100.0)  # Porcentaje 0-100
+    estado_planta: str = Field("sana", pattern="^(sana|enferma|muerta)$")  # 'sana', 'enferma', 'muerta'
     observaciones: Optional[str] = None
 
 
@@ -46,7 +47,8 @@ class ResumenFitosanitario(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/sub-inspeccion/{sub_inspeccion_id}", summary="Listar registros de una sub-inspección")
-def listar_registros_plantas(sub_inspeccion_id: str):
+def listar_registros_plantas(sub_inspeccion_id: str,
+                             current_user: dict = Depends(get_current_user)):
     """Retorna todos los registros de plantas de una sub-inspección."""
     supabase = get_supabase_client()
     response = (
@@ -60,7 +62,8 @@ def listar_registros_plantas(sub_inspeccion_id: str):
 
 
 @router.get("/{registro_id}", summary="Obtener registro de planta por ID")
-def obtener_registro_planta(registro_id: str):
+def obtener_registro_planta(registro_id: str,
+                            current_user: dict = Depends(get_current_user)):
     """Retorna un registro específico de planta inspeccionada."""
     supabase = get_supabase_client()
     response = (
@@ -75,7 +78,8 @@ def obtener_registro_planta(registro_id: str):
 
 
 @router.post("/", status_code=201, summary="Registrar una planta inspeccionada")
-def crear_registro_planta(registro: RegistroPlantaCreate):
+def crear_registro_planta(registro: RegistroPlantaCreate,
+                          current_user: dict = Depends(require_role(['tecnico', 'admin']))):
     """Registra una planta individual dentro de una sub-inspección."""
     supabase = get_supabase_client()
     response = supabase.table("registro_plantas").insert(registro.model_dump()).execute()
@@ -83,7 +87,8 @@ def crear_registro_planta(registro: RegistroPlantaCreate):
 
 
 @router.post("/bulk", status_code=201, summary="Registrar múltiples plantas")
-def crear_registros_bulk(registros: List[RegistroPlantaCreate]):
+def crear_registros_bulk(registros: List[RegistroPlantaCreate],
+                         current_user: dict = Depends(require_role(['tecnico', 'admin']))):
     """
     Registra múltiples plantas de una sola vez (bulk insert).
     Útil para registro masivo durante el muestreo en campo.
@@ -116,7 +121,8 @@ def crear_registros_bulk(registros: List[RegistroPlantaCreate]):
 
 
 @router.put("/{registro_id}", summary="Actualizar registro de planta")
-def actualizar_registro_planta(registro_id: str, registro: RegistroPlantaUpdate):
+def actualizar_registro_planta(registro_id: str, registro: RegistroPlantaUpdate,
+                               current_user: dict = Depends(require_role(['tecnico', 'admin']))):
     """Actualiza los datos de un registro de planta existente."""
     supabase = get_supabase_client()
     data = {k: v for k, v in registro.model_dump().items() if v is not None}
@@ -132,7 +138,8 @@ def actualizar_registro_planta(registro_id: str, registro: RegistroPlantaUpdate)
 
 
 @router.delete("/{registro_id}", status_code=204, summary="Eliminar registro de planta")
-def eliminar_registro_planta(registro_id: str):
+def eliminar_registro_planta(registro_id: str,
+                             current_user: dict = Depends(require_role(['admin']))):
     """Elimina un registro individual de planta."""
     supabase = get_supabase_client()
     supabase.table("registro_plantas").delete().eq("id", registro_id).execute()
@@ -144,7 +151,8 @@ def eliminar_registro_planta(registro_id: str):
     summary="Resumen fitosanitario de una sub-inspección",
     response_model=ResumenFitosanitario,
 )
-def resumen_fitosanitario(sub_inspeccion_id: str):
+def resumen_fitosanitario(sub_inspeccion_id: str,
+                          current_user: dict = Depends(get_current_user)):
     """
     Calcula y retorna el resumen fitosanitario de una sub-inspección.
     Incluye conteos de plantas por estado y porcentaje de incidencia.
@@ -202,59 +210,55 @@ class AlertaResponse(BaseModel):
     summary="Obtener nivel de alerta por cultivo y plaga",
     response_model=AlertaResponse,
 )
-def obtener_alerta_fitosanitaria(cultivo_id: str, plaga_id: str):
+def obtener_alerta_fitosanitaria(cultivo_id: str, plaga_id: str,
+                                  current_user: dict = Depends(get_current_user)):
     """
     Calcula el nivel de alerta fitosanitaria para un cultivo y plaga específicos.
-    Basado en el promedio de incidencia de las inspecciones.
+    Llama a la función almacenada fn_alerta_fitosanitaria en Supabase para optimizar rendimiento.
     """
     supabase = get_supabase_client()
-    
-    # 1. Obtener lotes del cultivo
-    lotes_res = supabase.table("lotes").select("id").eq("cultivo_id", cultivo_id).execute()
-    lote_ids = [l["id"] for l in lotes_res.data]
-    if not lote_ids:
-        return AlertaResponse(cultivo_id=cultivo_id, plaga_id=plaga_id, nivel_alerta="Bajo", incidencia_promedio=0.0, total_evaluadas=0, total_afectadas=0)
-    
-    # 2. Obtener inspecciones de esos lotes
-    inspecciones_res = supabase.table("inspecciones").select("id").in_("lote_id", lote_ids).execute()
-    inspeccion_ids = [i["id"] for i in inspecciones_res.data]
-    if not inspeccion_ids:
-        return AlertaResponse(cultivo_id=cultivo_id, plaga_id=plaga_id, nivel_alerta="Bajo", incidencia_promedio=0.0, total_evaluadas=0, total_afectadas=0)
+    try:
+        response = supabase.rpc("fn_alerta_fitosanitaria", {
+            "p_cultivo_id": cultivo_id,
+            "p_plaga_id": plaga_id
+        }).execute()
         
-    # 3. Obtener sub-inspecciones
-    subs_res = supabase.table("sub_inspecciones").select("id").in_("inspeccion_id", inspeccion_ids).execute()
-    sub_ids = [s["id"] for s in subs_res.data]
-    if not sub_ids:
-        return AlertaResponse(cultivo_id=cultivo_id, plaga_id=plaga_id, nivel_alerta="Bajo", incidencia_promedio=0.0, total_evaluadas=0, total_afectadas=0)
-
-    # 4. Obtener registros de plantas afectadas por la plaga en esas sub-inspecciones
-    # Consultamos TODOS los registros de esas sub-inspecciones para saber el total evaluado
-    registros_res = supabase.table("registro_plantas").select("plaga_id, estado_planta").in_("sub_inspeccion_id", sub_ids).execute()
-    registros = registros_res.data
-    
-    total_evaluadas = len(registros)
-    if total_evaluadas == 0:
-        return AlertaResponse(cultivo_id=cultivo_id, plaga_id=plaga_id, nivel_alerta="Bajo", incidencia_promedio=0.0, total_evaluadas=0, total_afectadas=0)
-
-    # Contamos las afectadas específicamente por esta plaga
-    afectadas = [r for r in registros if r.get("plaga_id") == plaga_id and r.get("estado_planta") in ["enferma", "muerta"]]
-    total_afectadas = len(afectadas)
-    
-    incidencia = (total_afectadas / total_evaluadas) * 100
-    
-    # Lógica de negocio normativa para el nivel de alerta
-    if incidencia > 10.0:
-        nivel = "Crítico"
-    elif incidencia >= 5.0:
-        nivel = "Medio"
-    else:
-        nivel = "Bajo"
-        
-    return AlertaResponse(
-        cultivo_id=cultivo_id,
-        plaga_id=plaga_id,
-        nivel_alerta=nivel,
-        incidencia_promedio=round(incidencia, 2),
-        total_evaluadas=total_evaluadas,
-        total_afectadas=total_afectadas
-    )
+        if not response.data:
+            return AlertaResponse(
+                cultivo_id=cultivo_id,
+                plaga_id=plaga_id,
+                nivel_alerta="Bajo",
+                incidencia_promedio=0.0,
+                total_evaluadas=0,
+                total_afectadas=0
+            )
+            
+        # El RPC puede retornar una lista o un único objeto
+        data = response.data
+        if isinstance(data, list):
+            if not data:
+                return AlertaResponse(
+                    cultivo_id=cultivo_id,
+                    plaga_id=plaga_id,
+                    nivel_alerta="Bajo",
+                    incidencia_promedio=0.0,
+                    total_evaluadas=0,
+                    total_afectadas=0
+                )
+            record = data[0]
+        else:
+            record = data
+            
+        return AlertaResponse(
+            cultivo_id=record.get("cultivo_id") or cultivo_id,
+            plaga_id=record.get("plaga_id") or plaga_id,
+            nivel_alerta=record.get("nivel_alerta") or "Bajo",
+            incidencia_promedio=record.get("incidencia_promedio") or 0.0,
+            total_evaluadas=record.get("total_evaluadas") or 0,
+            total_afectadas=record.get("total_afectadas") or 0
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener alerta fitosanitaria: {str(e)}"
+        )
