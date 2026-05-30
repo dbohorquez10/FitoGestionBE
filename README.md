@@ -1,152 +1,163 @@
-# FitoGestión Backend - API RESTful y Motor Transaccional para el ICA
+# 🟢 **FitoGestión Backend – Sistema de Control Fitosanitario**
 
-FitoGestión Backend es la infraestructura de servicios y el motor transaccional que proporciona soporte al Sistema de Gestión Fitosanitaria del **Instituto Colombiano Agropecuario (ICA)**. Esta API RESTful está diseñada para gestionar con alta disponibilidad, seguridad y rendimiento el censo de predios, cultivos, lotes y el registro de inspecciones epidemiológicas en el campo colombiano.
-
----
-
-## 🏗️ Arquitectura y Tecnologías
-
-El sistema backend adopta un enfoque moderno de **Microservicios distribuidos**, orquestados a través de un Gateway reverso que unifica el punto de entrada para los clientes.
-
-### Tecnologías Principales:
-* **FastAPI (Python 3.11+)**: Framework web asíncrono de alto rendimiento utilizado para construir las APIs debido a su velocidad (al nivel de Go y NodeJS) y su soporte nativo para programación concurrente/asíncrona (`async/await`).
-* **Supabase / PostgreSQL**: Base de datos relacional de nivel empresarial con soporte geoespacial que actúa como el backend-as-a-service (BaaS), proporcionando almacenamiento persistente y lógica en base de datos.
-* **Nginx**: Gateway de API centralizado que actúa como proxy reverso, gestionando el enrutamiento de peticiones, la terminación SSL y las políticas de CORS.
-* **Docker & Docker Compose**: Contenedorización completa de cada microservicio y del proxy reverso para garantizar la portabilidad y la paridad entre los entornos de desarrollo, pruebas y producción.
-
-### Topología de Microservicios:
-
-```
-                  ┌───────────────────────┐
-                  │   Cliente (Angular)   │
-                  └───────────┬───────────┘
-                              │ HTTP / HTTPS
-                              ▼
-                  ┌───────────────────────┐
-                  │    Nginx (Gateway)    │ (Puerto 8080)
-                  └──────┬─────────┬──────┘
-                         │         │
-        /api/core/*      │         │ /api/inspeccion/*
-                         ▼         ▼
-  ┌────────────────────────┐     ┌────────────────────────┐
-  │   ms-core-agricola     │     │    ms-inspecciones     │
-  │     (Puerto 8001)      │     │     (Puerto 8002)      │
-  └──────────┬─────────────┘     └─────────────┬──────────┘
-             │                                 │
-             └───────────────┬─────────────────┘
-                             ▼
-                 ┌───────────────────────┐
-                 │ Supabase (PostgreSQL) │
-                 └───────────────────────┘
-```
-
-1. **`ms-core-agricola`**: Microservicio encargado del dominio geográfico e identitario. Administra los registros de usuarios (Productores, Técnicos, Administradores), catálogo fitosanitario de plagas y cultivos, predios (lugares de producción) y sus respectivos lotes agrícolas.
-2. **`ms-inspecciones`**: Microservicio enfocado en el flujo transaccional de campo. Administra el ciclo de vida de las visitas técnicas (solicitudes, asignaciones, ejecuciones y cierres), sub-inspecciones por lote y el censo detallado de plantas afectadas, además de la generación de reportes oficiales en formato PDF.
+### Proyecto Integrador – Ingeniería de Sistemas
+**Universidad de Investigación y Desarrollo (UDI)**
+**Entrega Final – Backend (FastAPI & PostgreSQL)**
 
 ---
 
-## 🔐 Seguridad y Control de Acceso (RBAC)
+# 🎥 Video del prototipo funcionando
 
-El sistema implementa un modelo estricto de **Control de Acceso Basado en Roles (RBAC - Role-Based Access Control)** acoplado a la verificación de tokens criptográficos **JWT (JSON Web Tokens)**.
+🔗 [https://www.youtube.com/watch?v=tu_video_aqui](https://www.youtube.com/watch?v=tu_video_aqui)
 
-### Flujo de Autenticación y Autorización:
-1. **Inyección de Dependencias de Seguridad**: FastAPI valida el token JWT en cada solicitud entrante mediante el extractor de dependencias `get_current_user`.
-2. **Validación de Identidad**: El token extraído de la cabecera `Authorization: Bearer <token>` se verifica directamente contra el servicio de autenticación de Supabase. Si es válido y el usuario está marcado como `activo = True`, se recupera su perfil completo de la base de datos.
-3. **Control de Acceso de Ruta (`require_role`)**: Se protegen las rutas críticas utilizando decoradores basados en dependencias que limitan la ejecución a roles específicos (`admin`, `tecnico`, `productor`).
+---
 
+# 📌 Descripción general
+
+El backend de **FitoGestión** está diseñado bajo una arquitectura orientada a microservicios autónomos (`ms-core-agricola` y `ms-inspecciones`), construidos con **FastAPI** y **Python**. Sirve como el motor central transaccional y de seguridad para la plataforma del **Instituto Colombiano Agropecuario (ICA)**.
+
+El sistema garantiza alta concurrencia, validación estricta de datos y control de accesos mediante la integración segura con **Supabase (PostgreSQL y Auth)**.
+
+* ✔ **Control de Acceso basado en Roles (RBAC)** aplicado a nivel de endpoints.
+* ✔ Lógica inteligente de **asignación de inspecciones** (prevención de colisiones de agenda).
+* ✔ **Gestión integral de activos:** Predios, lotes (con límites lógicos) y catálogos de cultivos/plagas.
+* ✔ Optimización de rendimiento mediante **Procedimientos Almacenados (RPC)** en Base de Datos.
+* ✔ Arquitectura de base de datos relacional con integridad referencial estricta.
+
+---
+
+# 🎯 Objetivos del sistema
+
+* Proveer una API RESTful rápida y segura para el consumo desde aplicaciones web y móviles.
+* Garantizar la consistencia de los datos agrícolas y fitosanitarios evitando inserciones anómalas (ej. hectáreas negativas, coordenadas inválidas).
+* Centralizar la lógica de negocio de las inspecciones, delegando el cómputo pesado a la base de datos mediante funciones SQL.
+* Proteger la información sensible asegurando que cada rol solo acceda y modifique sus propios recursos.
+
+---
+
+## 🗂️ Estructura del Código Fuente
+
+```plaintext
+FitoGestionBE/
+│
+├── ms-core-agricola/             # Microservicio de gestión de usuarios y predios
+│   ├── app/
+│   │   ├── api/                  # Endpoints (auth.py, predios.py, catalogos.py)
+│   │   ├── core/                 # Lógica de seguridad y RBAC (security.py)
+│   │   └── schemas/              # Modelos de validación estricta (Pydantic)
+│   └── main.py
+│
+├── ms-inspecciones/              # Microservicio de ejecución de visitas técnicas
+│   ├── app/
+│   │   └── api/                  # Endpoints (inspecciones.py, registro_plantas.py)
+│   └── main.py
+│
+└── sql/
+    └── init_db.sql               # Esquemas relacionales, Triggers y funciones RPC
+```
+
+---
+
+# 🔐 Roles del sistema (API)
+
+### 🟩 **ADMINISTRADOR**
+Acceso total a los recursos del sistema:
+* Aprueba o rechaza solicitudes de inspección manuales.
+* Modifica y aprueba plagas sugeridas en los catálogos globales.
+* Administra usuarios (CRUD de técnicos y productores).
+
+### 🟦 **TECNICO ICA**
+Permisos de escritura limitados a la operación en campo:
+* Registra plantas evaluadas e incidencias fitosanitarias.
+* Sugiere nuevas plagas (`estado: pendiente`) durante las visitas.
+* Finaliza inspecciones asignadas a su perfil.
+
+### 🟧 **PRODUCTOR**
+Acceso restringido a su propia información:
+* Lee, crea y elimina *únicamente* sus propios predios y lotes.
+* Solicita inspecciones de sus cultivos.
+
+---
+
+# 🗄️ Base de datos y Despliegue
+
+Conexión utilizada mediante entorno Cloud:
+
+| Parámetro    | Valor                   |
+| ------------ | ----------------------- |
+| Motor DB     | PostgreSQL (Supabase)   |
+| Autenticación| Supabase Auth (JWT)     |
+| Hosting API  | Railway                 |
+| Servidor     | Uvicorn                 |
+
+---
+
+# 🚨 Lógica clave implementada
+
+## **1️⃣ Control de Roles Dinámico (RBAC)**
+Protección de rutas mediante Inyección de Dependencias en FastAPI.
 ```python
-# Ejemplo de protección de endpoint con require_role
-@router.patch("/{inspeccion_id}/aprobacion")
-def evaluar_aprobacion(inspeccion_id: str, 
-                       evaluacion: EvaluacionAprobacion,
-                       current_user: dict = Depends(require_role(['admin']))):
-    # Solo los usuarios con rol 'admin' pueden ejecutar esta acción
-    ...
+@router.delete("/{predio_id}", status_code=204)
+def eliminar_predio(
+    predio_id: str,
+    current_user: dict = Depends(require_role(['productor', 'admin']))
+):
+    # Lógica que verifica que el predio pertenece al usuario actual
+    pass
 ```
 
-### Roles y Permisos Definidos:
-* **Administrador (`admin`)**: Acceso global de lectura/escritura. Es el único rol facultado para gestionar catálogos de cultivos y plagas (aprobar sugerencias), crear o suspender usuarios, eliminar registros e inspecciones, y emitir evaluaciones de aprobación oficiales sobre inspecciones críticas.
-* **Técnico ICA (`tecnico`)**: Permiso para visualizar su agenda de visitas asignadas, iniciar e inspeccionar lotes (crear sub-inspecciones y registros de plantas), proponer nuevas plagas al catálogo, y finalizar inspecciones de campo.
-* **Productor (`productor`)**: Acceso restringido a su propia información de producción. Puede dar de alta sus predios y lotes, solicitar inspecciones fitosanitarias para sus tierras, y descargar los informes PDF aprobados por el ICA.
-
----
-
-## ⚡ Lógica de Negocio y Rendimiento
-
-Para asegurar la robustez de los datos y un alto desempeño ante consultas masivas, el backend aprovecha la validación tipada en la capa de aplicación y la delegación de cómputo pesado a la base de datos.
-
-### 1. Validación Estricta con Pydantic
-Cada entrada de datos es validada en tiempo de ejecución por esquemas de **Pydantic**. Esto previene la inyección de datos malformados y asegura que se cumplan las restricciones lógicas básicas (como expresiones regulares para campos de severidad o rangos flotantes para tasas de incidencia):
-
+## **2️⃣ Optimización de Consultas (RPC)**
+Cálculo en vivo de alertas fitosanitarias delegando la carga a Supabase para evitar cuellos de botella (N+1).
 ```python
-class RegistroPlantaCreate(BaseModel):
-    sub_inspeccion_id: str
-    numero_planta: int
-    plaga_id: Optional[str] = None
-    sintoma: Optional[str] = None
-    severidad: Optional[str] = Field(None, pattern="^(leve|moderado|severo)$")
-    incidencia: Optional[float] = Field(None, ge=0.0, le=100.0)
-    estado_planta: str = Field("sana", pattern="^(sana|enferma|muerta)$")
-    observaciones: Optional[str] = None
+@router.get("/alerta/{cultivo_id}/{plaga_id}")
+def obtener_alerta_fitosanitaria(cultivo_id: str, plaga_id: str):
+    result = supabase.rpc("fn_alerta_fitosanitaria", {
+        "p_cultivo_id": cultivo_id,
+        "p_plaga_id": plaga_id
+    }).execute()
+    return result.data
 ```
-
-### 2. Optimización con Procedimientos Almacenados (RPC)
-Para evitar el cuello de botella que supone procesar miles de registros de plantas en la capa de aplicación (efecto *N+1 queries*), los cálculos analíticos complejos y masivos se delegan a **Procedimientos Almacenados (Stored Procedures)** programados directamente en PL/pgSQL dentro de la base de datos PostgreSQL, los cuales son invocados mediante Remote Procedure Calls (RPC):
-* **`fn_alerta_fitosanitaria`**: Calcula dinámicamente y en milisegundos el nivel de alerta epidemiológico de un cultivo y plaga específicos (Bajo, Medio, Crítico), evaluando los datos históricos de todas las inspecciones realizadas en la zona sin necesidad de transferir millones de filas por la red.
-* **`fn_generar_informe_inspeccion`**: Consolida todas las sub-inspecciones y conteos de plantas enfermas en un solo objeto JSON estructurado, listo para el consumo del generador de PDF.
 
 ---
 
-## 🚀 Guía de Despliegue
+# 📊 Estado del proyecto (FINAL)
 
-### Requisitos Previos:
-* Python 3.11 o superior instalado.
-* Docker y Docker Compose instalados.
-* Cuenta activa en Supabase (PostgreSQL).
-
-### 1. Configuración de Variables de Entorno (Local)
-Duplique el archivo `.env.example` en la raíz de cada microservicio y configure los valores correspondientes:
-
-```bash
-cp .env.example .env
-```
-
-El archivo `.env` debe incluir las variables de conexión a su proyecto de Supabase:
-```ini
-SUPABASE_URL=https://tu-proyecto.supabase.co
-SUPABASE_ANON_KEY=tu-anon-key-publica
-SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key-privada
-```
-
-### 2. Inicialización de la Base de Datos
-Acceda al **SQL Editor** de su consola de Supabase y ejecute el contenido del archivo `sql/init_db.sql` y las migraciones subsiguientes de la carpeta `sql/` para levantar el esquema de tablas, restricciones de integridad referencial, roles por defecto y procedimientos almacenados (RPC).
-
-### 3. Ejecución Local con Docker Compose
-Para iniciar toda la infraestructura localmente (microservicios y gateway proxy Nginx), ejecute en la raíz del proyecto:
-
-```bash
-docker compose up --build
-```
-
-Una vez iniciados los contenedores, los servicios estarán disponibles en:
-* **Gateway Unificado**: `http://localhost:8080`
-* **Swagger ms-core-agricola**: `http://localhost:8080/api/core/docs`
-* **Swagger ms-inspecciones**: `http://localhost:8080/api/inspeccion/docs`
-
-### 4. Despliegue en Producción (Railway)
-Para desplegar la API en producción utilizando la plataforma **Railway**:
-1. Conecte su repositorio de GitHub a Railway.
-2. Cree servicios independientes para cada microservicio (`ms-core-agricola` y `ms-inspecciones`) y para el gateway de Nginx.
-3. Configure las variables de entorno en la sección *Variables* de Railway. Es mandatorio establecer:
-   * `SUPABASE_URL`: URL del proyecto Supabase.
-   * `SUPABASE_SERVICE_ROLE_KEY`: Clave de rol de servicio (Service Role Key) para permitir modificaciones administrativas autorizadas.
+| Módulo                 | Estado                   |
+| ---------------------- | ------------------------ |
+| Conexión Supabase      | ✔                        |
+| Auth y RBAC (JWT)      | ✔                        |
+| CRUD Cultivos/Plagas   | ✔                        |
+| CRUD Productores/Tecs  | ✔                        |
+| CRUD Predios/Lotes     | ✔                        |
+| Prevención Colisiones  | ✔                        |
+| Inspecciones (Bulk)    | ✔                        |
+| Alertas Fitosanitarias | ✔                        |
+| Validaciones Pydantic  | ✔                        |
 
 ---
 
-✒️ Autores
-Darwing Yailang Bohórquez Jaimes
-Karen Rocío Cristancho Fajardo
-Jhonatan Arturo Castro Arguello
-Estudiantes de Ingeniería de Sistemas – V Semestre
-Universidad de Investigación y Desarrollo (UDI)
-📅 2026
+# 🛠️ Tecnologías utilizadas
+
+| Categoría    | Tecnología         |
+| ------------ | ------------------ |
+| Lenguaje     | Python 3.10+       |
+| Framework    | FastAPI            |
+| Validación   | Pydantic v2        |
+| BD           | PostgreSQL         |
+| BaaS / Auth  | Supabase           |
+| Arquitectura | Microservicios     |
+
+---
+
+# 🚀 Mejoras futuras
+
+* Panel estadístico avanzado (cultivos más afectados, zonas críticas).
+* Integración directa con servicios web heredados del ICA.
+* Exportación automatizada de reportes a PDF desde el backend.
+
+---
+
+# ✒️ Autores
+
+**Darwing Yailang Bohórquez Jaimes** **Karen Rocío Cristancho Fajardo** **Jhonatan Arturo Castro Arguello** Estudiantes de Ingeniería de Sistemas – V Semestre  
+**Universidad de Investigación y Desarrollo (UDI)** 📅 2026
