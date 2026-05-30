@@ -38,11 +38,12 @@ class InspeccionUpdate(BaseModel):
     tecnico_id: Optional[str] = None
     tecnico_nombre: Optional[str] = None
     modo_asignacion: Optional[str] = None
-    estado: Optional[str] = None  # 'pendiente', 'en_progreso', 'completada', 'cancelada'
+    estado: Optional[str] = None  # 'pendiente', 'en_progreso', 'completada', 'cancelada', 'rechazada'
     observaciones: Optional[str] = None
     resultado_general: Optional[str] = None  # 'sin_novedad', 'con_hallazgos', 'critico'
     fecha_cierre: Optional[date] = None
     razon_rechazo: Optional[str] = None
+    motivo_rechazo: Optional[str] = None
 
 
 class InspeccionResponse(BaseModel):
@@ -515,6 +516,48 @@ def evaluar_aprobacion(inspeccion_id: str, evaluacion: EvaluacionAprobacion):
     )
     if not response.data:
         raise HTTPException(status_code=400, detail="Error al actualizar la aprobación")
+    return response.data[0]
+
+
+class EstadoInspeccionUpdate(BaseModel):
+    """Payload para actualizar el estado de una inspección, exigiendo motivo de rechazo si es rechazada."""
+    estado: str
+    motivo_rechazo: Optional[str] = None
+
+
+@router.patch("/{inspeccion_id}/estado", summary="Actualizar estado de inspección (Aprobación/Rechazo)")
+def actualizar_estado_inspeccion(inspeccion_id: str, payload: EstadoInspeccionUpdate):
+    """
+    Actualiza el estado de una inspección.
+    Si el estado es 'rechazada', exige y guarda 'motivo_rechazo'.
+    """
+    if payload.estado == "rechazada":
+        if not payload.motivo_rechazo or not payload.motivo_rechazo.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="El motivo de rechazo es obligatorio para rechazar la solicitud de asignación."
+            )
+            
+    supabase = get_supabase_client()
+    
+    # 1. Obtener la inspección para verificar existencia
+    resp_get = supabase.table("inspecciones").select("id").eq("id", inspeccion_id).execute()
+    if not resp_get.data:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+        
+    # 2. Actualizar el estado y motivo de rechazo
+    update_data = {
+        "estado": payload.estado
+    }
+    if payload.estado == "rechazada":
+        update_data["motivo_rechazo"] = payload.motivo_rechazo.strip()
+    else:
+        update_data["motivo_rechazo"] = None
+        
+    response = supabase.table("inspecciones").update(update_data).eq("id", inspeccion_id).execute()
+    if not response.data:
+        raise HTTPException(status_code=400, detail="Error al actualizar el estado de la inspección")
+        
     return response.data[0]
 
 

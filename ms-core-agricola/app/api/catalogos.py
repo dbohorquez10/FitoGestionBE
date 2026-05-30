@@ -106,7 +106,6 @@ def sugerir_plaga(plaga: PlagaSugerir):
             "tipo": plaga.tipo,
             "descripcion": plaga.descripcion,
             "icon": plaga.icon,
-            "color": plaga.color,
             "estado": "pendiente"
         }
         response = supabase.table("plagas").insert(plaga_data).execute()

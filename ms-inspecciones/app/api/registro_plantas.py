@@ -88,10 +88,31 @@ def crear_registros_bulk(registros: List[RegistroPlantaCreate]):
     Registra múltiples plantas de una sola vez (bulk insert).
     Útil para registro masivo durante el muestreo en campo.
     """
-    supabase = get_supabase_client()
-    data = [r.model_dump() for r in registros]
-    response = supabase.table("registro_plantas").insert(data).execute()
-    return {"inserted": len(response.data), "records": response.data}
+    try:
+        supabase = get_supabase_client()
+        data = [r.model_dump() for r in registros]
+        if not data:
+            return {"inserted": 0, "records": []}
+        response = supabase.table("registro_plantas").insert(data).execute()
+        return {"inserted": len(response.data), "records": response.data}
+    except Exception as e:
+        error_msg = str(e)
+        if "foreign key" in error_msg.lower() or "violates foreign key constraint" in error_msg.lower():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Error de integridad referencial: Asegúrese de que todos los IDs (como sub_inspeccion_id o plaga_id) sean válidos. Detalles: {error_msg}"
+            )
+        elif "check constraint" in error_msg.lower() or "violates check constraint" in error_msg.lower():
+            raise HTTPException(
+                status_code=422,
+                detail=f"Error de validación de datos: Algunos registros no cumplen con las restricciones de la base de datos (ej. severidad o incidencia inválidas). Detalles: {error_msg}"
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Error al procesar el guardado masivo de plantas: {error_msg}"
+            )
+
 
 
 @router.put("/{registro_id}", summary="Actualizar registro de planta")
