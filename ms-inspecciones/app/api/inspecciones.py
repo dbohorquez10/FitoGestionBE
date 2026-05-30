@@ -480,6 +480,12 @@ def evaluar_aprobacion(inspeccion_id: str, evaluacion: EvaluacionAprobacion):
         raise HTTPException(status_code=404, detail="Inspección no encontrada")
         
     inspeccion = resp_get.data[0]
+    if inspeccion.get("estado_aprobacion") == "aprobado" and evaluacion.estado_aprobacion == "rechazado":
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede rechazar/anular una inspección que ya ha sido aprobada oficialmente."
+        )
+        
     incidencia_global = float(inspeccion.get("incidencia_global_pct") or 0.0)
     
     if evaluacion.estado_aprobacion == "aprobado":
