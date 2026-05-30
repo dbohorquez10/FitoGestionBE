@@ -75,7 +75,7 @@ def crear_plaga(plaga: PlagaCreate):
     try:
         # Separar cultivos_afectados del payload principal (no es columna de la tabla plagas)
         cultivos_ids = plaga.cultivos_afectados or []
-        plaga_data = plaga.model_dump(exclude={"cultivos_afectados"})
+        plaga_data = plaga.model_dump(exclude={"cultivos_afectados", "icon", "color"})
         response = supabase.table("plagas").insert(plaga_data).execute()
         nueva_plaga = response.data[0]
 
@@ -105,7 +105,6 @@ def sugerir_plaga(plaga: PlagaSugerir):
             "nombre_cientifico": plaga.nombre_cientifico,
             "tipo": plaga.tipo,
             "descripcion": plaga.descripcion,
-            "icon": plaga.icon,
             "estado": "pendiente"
         }
         response = supabase.table("plagas").insert(plaga_data).execute()
@@ -183,7 +182,7 @@ def actualizar_plaga(plaga_id: str, plaga: PlagaCreate):
     """
     supabase = get_supabase_client()
     cultivos_ids = plaga.cultivos_afectados or []
-    plaga_data = plaga.model_dump(exclude={"cultivos_afectados"})
+    plaga_data = plaga.model_dump(exclude={"cultivos_afectados", "icon", "color"})
     response = supabase.table("plagas").update(plaga_data).eq("id", plaga_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Plaga no encontrada")
