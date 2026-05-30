@@ -172,8 +172,22 @@ def actualizar_lote(lote_id: str, lote: LoteUpdate,
 
 @router.delete("/{lote_id}", status_code=204, summary="Eliminar un lote")
 def eliminar_lote(lote_id: str,
-                 current_user: dict = Depends(require_role(['admin']))):
+                 current_user: dict = Depends(require_role(['admin', 'productor']))):
     """Elimina un lote del sistema."""
     supabase = get_supabase_client()
+    
+    if current_user.get("rol") == "productor":
+        lote_res = supabase.table("lotes").select("predio_id").eq("id", lote_id).execute()
+        if not lote_res.data:
+            raise HTTPException(status_code=404, detail="Lote no encontrado")
+        predio_id = lote_res.data[0]["predio_id"]
+        
+        predio_res = supabase.table("predios").select("productor_id").eq("id", predio_id).execute()
+        if not predio_res.data or predio_res.data[0].get("productor_id") != current_user.get("id"):
+            raise HTTPException(
+                status_code=403,
+                detail="No tienes permisos para eliminar este lote"
+            )
+            
     supabase.table("lotes").delete().eq("id", lote_id).execute()
     return None
